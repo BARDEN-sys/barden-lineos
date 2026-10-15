@@ -117,3 +117,14 @@ describe("friendlyError", () => {
     expect(friendlyError("new row violates row-level security policy for table \"jobs\"")).toBe("Only the foreman can change that.");
   });
 });
+
+import { tokenFromLink } from "@/components/AuthProvider";
+describe("tokenFromLink", () => {
+  it("reads the one-time token from a Supabase sign-in link", () => {
+    expect(
+      tokenFromLink("https://klvkehiasgkteprmxihs.supabase.co/auth/v1/verify?token=abc123&type=magiclink&redirect_to=https://barden-lineos.vercel.app"),
+    ).toEqual({ hash: "abc123", type: "magiclink" });
+    expect(tokenFromLink("https://x.supabase.co/auth/v1/verify?token=zz&type=signup")).toEqual({ hash: "zz", type: "signup" });
+    expect(tokenFromLink("not a link")).toBeNull();
+  });
+});

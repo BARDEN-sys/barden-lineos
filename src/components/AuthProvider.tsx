@@ -15,6 +15,8 @@ type Auth = {
   displayName: string;
   sendCode: (to: string) => Promise<{ ok: boolean; error?: string; channel: "email" | "sms" }>;
   verifyCode: (to: string, code: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Sign in with the link copied from the email (works inside the home-screen app). */
+  verifyLink: (link: string) => Promise<{ ok: boolean; error?: string }>;
   saveName: (name: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -29,6 +31,19 @@ export function normalizeContact(raw: string): { channel: "email" | "sms"; value
   if (digits.startsWith("+")) return { channel: "sms", value: digits };
   const d = digits.replace(/\D/g, "");
   return { channel: "sms", value: d.length === 10 ? `+1${d}` : `+${d}` };
+}
+
+/** The one-time token inside a Supabase sign-in link (…/auth/v1/verify?token=…&type=magiclink). */
+export function tokenFromLink(link: string): { hash: string; type: "email" | "signup" | "magiclink" } | null {
+  try {
+    const u = new URL(link.trim());
+    const hash = u.searchParams.get("token") || u.searchParams.get("token_hash");
+    if (!hash) return null;
+    const t = u.searchParams.get("type");
+    return { hash, type: t === "signup" ? "signup" : t === "magiclink" ? "magiclink" : "email" };
+  } catch {
+    return null;
+  }
 }
 
 function friendlyAuthError(msg: string): string {
@@ -104,6 +119,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }, [loadProfile]);
 
+  const verifyLink = useCallback(
+    async (link: string) => {
+      const token = tokenFromLink(link);
+      if (!token) return { ok: false, error: "That doesn't look like the sign-in link. Copy the Log In link from the email." };
+      const res = await supabase().auth.verifyOtp({ token_hash: token.hash, type: token.type });
+      if (res.error) return { ok: false, error: friendlyAuthError(res.error.message) };
+      const id = res.data.user?.id ?? null;
+      setUserId(id);
+      await loadProfile(id);
+      return { ok: true };
+    },
+    [loadProfile],
+  );
+
   const saveName = useCallback(
     async (name: string) => {
       if (!userId) return;
@@ -123,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const displayName = profile?.display_name || profile?.email || profile?.phone || "";
 
   return (
-    <AuthContext.Provider value={{ ready, userId, profile, displayName, sendCode, verifyCode, saveName, signOut }}>
+    <AuthContext.Provider value={{ ready, userId, profile, displayName, sendCode, verifyCode, verifyLink, saveName, signOut }}>
       {children}
     </AuthContext.Provider>
   );

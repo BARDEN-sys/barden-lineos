@@ -5,7 +5,8 @@ import { useAuth } from "./AuthProvider";
 
 /** Sign in with a 6-digit code (or link) sent to your email, then (first time) your name. */
 export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; title?: string }) {
-  const { userId, profile, sendCode, verifyCode, saveName } = useAuth();
+  const { userId, profile, sendCode, verifyCode, verifyLink, saveName } = useAuth();
+  const [link, setLink] = useState("");
   const [to, setTo] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -111,7 +112,33 @@ export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; tit
           >
             {busy ? "Checking…" : "Sign in"}
           </button>
-          <button className="btn-ghost" onClick={() => { setSentTo(null); setCode(""); setError(null); }}>
+          <div className="mt-2 flex flex-col gap-2 border-t border-slate-200 pt-3">
+            <p className="text-sm text-slate-700">
+              <b>Email has a &ldquo;Log In&rdquo; link instead of a code?</b> Press and hold the link → <b>Copy Link</b>, then
+              paste it here:
+            </p>
+            <input
+              className="input"
+              placeholder="Paste the sign-in link"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
+            <button
+              className="btn-primary"
+              disabled={!link.trim() || busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                const r = await verifyLink(link);
+                setBusy(false);
+                if (!r.ok) setError(r.error ?? "That link didn't work.");
+                else onDone?.();
+              }}
+            >
+              Sign in with link
+            </button>
+          </div>
+          <button className="btn-ghost" onClick={() => { setSentTo(null); setCode(""); setLink(""); setError(null); }}>
             Use a different email
           </button>
         </>
