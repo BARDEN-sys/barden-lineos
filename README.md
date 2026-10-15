@@ -30,6 +30,8 @@ npm run build
     speech recognition; falls back to the phone keyboard's mic key).
   - **Job report PDF:** BARDEN logo, units vs master, flags, work by sheet, crew marks and
     changes (who / when), photos. The logo is `public/barden-logo.png`.
+  - **Daily report PDF:** pick a work day; units marked that day vs job to date and master,
+    each crew member's marks with times, changes / overrides that day, and that day's photos.
   - **WORK PERFORMED box:** blue table like the crew's finished sheets; tap "Box" and then an
     empty spot on the map to place it. Code callouts are yellow tags with arrows.
 - M2: photo of marked-up paper → detect highlights.

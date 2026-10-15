@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { renderSheets, summaryCsv } from "@/lib/output";
+import { activityDays, buildDailyReport, dayKey, dayLabel } from "@/lib/daily";
 import { buildJobReport } from "@/lib/report";
 import { DEMO_USER } from "@/lib/types";
 import { Flags } from "./AllocationTab";
@@ -26,6 +27,7 @@ export function ExportTab() {
   const { job, result } = useJob();
   const [date, setDate] = useState(today);
   const [preparedBy, setPreparedBy] = useState(DEMO_USER);
+  const [day, setDay] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (!job || !result) return null;
@@ -43,16 +45,22 @@ export function ExportTab() {
     }
   }
 
-  async function report() {
-    setBusy("report");
+  const days = activityDays(job);
+  const reportDay = day ?? days[0] ?? dayKey(new Date().toISOString());
+
+  async function report(kind: "job" | "daily") {
+    setBusy(kind);
     setError(null);
     try {
-      // Logo is optional: drop the BARDEN logo at public/barden-logo.png.
-      const logo = await fetch("/barden-logo.png")
+      const logoBuf = await fetch("/barden-logo.png")
         .then((r) => (r.ok && r.headers.get("content-type")?.startsWith("image/") ? r.arrayBuffer() : null))
         .catch(() => null);
-      const opts = { date, preparedBy, logo: logo ? new Uint8Array(logo) : undefined };
-      download(await buildJobReport(job!, result!, opts), `WO-${wo}-job-report.pdf`, "application/pdf");
+      const logo = logoBuf ? new Uint8Array(logoBuf) : undefined;
+      if (kind === "job") {
+        download(await buildJobReport(job!, result!, { date, preparedBy, logo }), `WO-${wo}-job-report.pdf`, "application/pdf");
+      } else {
+        download(await buildDailyReport(job!, result!, { day: reportDay, preparedBy, logo }), `WO-${wo}-daily-${reportDay}.pdf`, "application/pdf");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -96,8 +104,31 @@ export function ExportTab() {
           Prepared by
           <input className="input w-64" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} />
         </label>
-        <button className="btn-primary self-start" disabled={!!busy} onClick={report}>
-          {busy === "report" ? "Building…" : "Job report PDF"}
+        <button className="btn-primary self-start" disabled={!!busy} onClick={() => report("job")}>
+          {busy === "job" ? "Building…" : "Job report PDF"}
+        </button>
+      </section>
+      <section className="card flex flex-col gap-3">
+        <h2 className="font-bold">Daily report</h2>
+        <p className="text-sm text-slate-600">
+          One day&apos;s work: units marked that day vs job to date and master, each crew member&apos;s marks with
+          times, changes and overrides, and that day&apos;s photos.
+        </p>
+        {days.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {days.map((d) => (
+              <button key={d} onClick={() => setDay(d)} className={`chip min-h-9 px-3 ${d === reportDay ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300"}`}>
+                {dayLabel(d)}
+              </button>
+            ))}
+          </div>
+        )}
+        <label className="flex flex-col gap-1 text-sm">
+          Work date
+          <input type="date" className="input w-48" value={reportDay} onChange={(e) => e.target.value && setDay(e.target.value)} />
+        </label>
+        <button className="btn-primary self-start" disabled={!!busy} onClick={() => report("daily")}>
+          {busy === "daily" ? "Building…" : `Daily report PDF · ${dayLabel(reportDay)}`}
         </button>
       </section>
       <section className="card">

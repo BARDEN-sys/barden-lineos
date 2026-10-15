@@ -1,18 +1,18 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { workPerformed, type AllocationResult } from "./allocation";
-import type { Job } from "./types";
+import type { Job, Photo } from "./types";
 
 // Job report: one PDF a foreman can send with the sheets — header, units vs master,
 // flags, work by sheet, crew notes (who / when) and the job photos.
 
 const PAGE: [number, number] = [612, 792]; // US Letter portrait
-const M = 40;
-const INK = rgb(0.1, 0.1, 0.12);
-const MUTED = rgb(0.4, 0.42, 0.47);
-const BLUE = rgb(0.12, 0.27, 0.56); // BARDEN logo blue
-const RED = rgb(0.75, 0.1, 0.1);
-const AMBER = rgb(0.65, 0.4, 0.0);
-const GREEN = rgb(0.05, 0.5, 0.25);
+export const M = 40;
+export const INK = rgb(0.1, 0.1, 0.12);
+export const MUTED = rgb(0.4, 0.42, 0.47);
+export const BLUE = rgb(0.12, 0.27, 0.56); // BARDEN logo blue
+export const RED = rgb(0.75, 0.1, 0.1);
+export const AMBER = rgb(0.65, 0.4, 0.0);
+export const GREEN = rgb(0.05, 0.5, 0.25);
 const RULE = rgb(0.85, 0.86, 0.88);
 
 export type ReportOptions = {
@@ -24,7 +24,7 @@ export type ReportOptions = {
 
 const isPng = (b: Uint8Array) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
 
-class Cursor {
+export class Cursor {
   page!: PDFPage;
   y = 0;
   pageNo = 0;
@@ -99,26 +99,25 @@ function wrap(text: string, font: PDFFont, size: number, maxW: number): string[]
   return out;
 }
 
-const fmt = (n: number) => n.toLocaleString("en-US");
-const when = (iso: string) => {
+export const fmt = (n: number) => n.toLocaleString("en-US");
+export const when = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : `${d.getMonth() + 1}/${d.getDate()} ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 };
 
-export async function buildJobReport(job: Job, result: AllocationResult, opts: ReportOptions): Promise<Uint8Array> {
+/** New report document with the BARDEN header and a title block of facts. */
+export async function startReport(job: Job, title: string, footer: string, facts: [string, string][], logoBytes?: Uint8Array) {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const wo = job.header.woNumber || "—";
-  doc.setTitle(`WO ${wo} job report`);
-  const c = new Cursor(doc, font, bold, `BARDEN LineOS · WO ${wo} job report · ${opts.date}`);
-  const label = (id: string | null) => job.sheets.find((s) => s.id === id)?.label ?? "—";
+  doc.setTitle(title);
+  const c = new Cursor(doc, font, bold, footer);
 
   // Header: logo (or wordmark) top-left, app name top-right.
   let logo: PDFImage | null = null;
-  if (opts.logo?.length) {
+  if (logoBytes?.length) {
     try {
-      logo = isPng(opts.logo) ? await doc.embedPng(opts.logo) : await doc.embedJpg(opts.logo);
+      logo = isPng(logoBytes) ? await doc.embedPng(logoBytes) : await doc.embedJpg(logoBytes);
     } catch {
       logo = null;
     }
@@ -135,16 +134,30 @@ export async function buildJobReport(job: Job, result: AllocationResult, opts: R
   const app = "LineOS";
   c.page.drawText(app, { x: PAGE[0] - M - bold.widthOfTextAtSize(app, 11), y: c.y - 14, size: 11, font: bold, color: MUTED });
   c.y -= logoH + 14;
-  c.text(`Job Report — WO ${wo}`, { size: 20, bold: true, gap: 4 });
-  const facts: [string, string][] = [
-    ["Project #", job.header.projectNumber || "—"],
-    ["Engineers", job.header.engineers.join(", ") || "—"],
-    ["Print", `${job.pdfName} (${job.sheets.length} sheets)`],
-    ["Report date", opts.date],
-    ["Prepared by", opts.preparedBy],
-  ];
+  c.text(title, { size: 20, bold: true, gap: 4 });
   for (const [k, v] of facts) c.row([k, v], [M, M + 90]);
   c.y -= 6;
+  return { doc, c, font, bold };
+}
+
+export const sheetLabel = (job: Job) => (id: string | null) => job.sheets.find((s) => s.id === id)?.label ?? "—";
+
+export async function buildJobReport(job: Job, result: AllocationResult, opts: ReportOptions): Promise<Uint8Array> {
+  const wo = job.header.woNumber || "—";
+  const { doc, c } = await startReport(
+    job,
+    `Job Report — WO ${wo}`,
+    `BARDEN LineOS · WO ${wo} job report · ${opts.date}`,
+    [
+      ["Project #", job.header.projectNumber || "—"],
+      ["Engineers", job.header.engineers.join(", ") || "—"],
+      ["Print", `${job.pdfName} (${job.sheets.length} sheets)`],
+      ["Report date", opts.date],
+      ["Prepared by", opts.preparedBy],
+    ],
+    opts.logo,
+  );
+  const label = sheetLabel(job);
   if (result.canExport) c.text("Status: ready to export — no code is over master.", { bold: true, color: GREEN });
   else for (const b of result.blockers) c.text(`Status: EXPORT BLOCKED — ${b}`, { bold: true, color: RED });
 
@@ -209,40 +222,42 @@ export async function buildJobReport(job: Job, result: AllocationResult, opts: R
     if (removals) c.text(`Plus ${removals} removal spot(s) marked without unit codes.`, { size: 9, color: MUTED });
   }
 
-  // Photos, two per row.
-  if (job.photos.length) {
-    c.heading("Photos", 280);
-    const colW = (PAGE[0] - 2 * M - 12) / 2;
-    let col = 0;
-    let rowH = 0;
-    for (const p of job.photos) {
-      let img: PDFImage;
-      try {
-        img = await doc.embedJpg(new Uint8Array(await p.blob.arrayBuffer()));
-      } catch {
-        continue;
-      }
-      const h = Math.min(220, (colW * img.height) / img.width);
-      const w = (h * img.width) / img.height;
-      if (col === 0) {
-        c.need(h + 24);
-        rowH = 0;
-      }
-      const x = M + col * (colW + 12);
-      c.page.drawImage(img, { x, y: c.y - h, width: w, height: h });
-      c.page.drawText(`Sheet ${label(p.sheetId)} · ${p.kind === "markup" ? "marked-up print" : "field"} · ${p.createdBy} · ${when(p.takenAt)}`, {
-        x,
-        y: c.y - h - 11,
-        size: 8,
-        font,
-        color: MUTED,
-      });
-      rowH = Math.max(rowH, h + 20);
-      col = (col + 1) % 2;
-      if (col === 0) c.y -= rowH;
-    }
-    if (col === 1) c.y -= rowH;
-  }
-
+  await drawPhotos(c, job.photos, label);
   return doc.save();
+}
+
+/** Photos two per row with a caption line. */
+export async function drawPhotos(c: Cursor, photos: Photo[], label: (id: string | null) => string, heading = "Photos") {
+  if (!photos.length) return;
+  c.heading(heading, 280);
+  const colW = (PAGE[0] - 2 * M - 12) / 2;
+  let col = 0;
+  let rowH = 0;
+  for (const p of photos) {
+    let img: PDFImage;
+    try {
+      img = await c.doc.embedJpg(new Uint8Array(await p.blob.arrayBuffer()));
+    } catch {
+      continue;
+    }
+    const h = Math.min(220, (colW * img.height) / img.width);
+    const w = (h * img.width) / img.height;
+    if (col === 0) {
+      c.need(h + 24);
+      rowH = 0;
+    }
+    const x = M + col * (colW + 12);
+    c.page.drawImage(img, { x, y: c.y - h, width: w, height: h });
+    c.page.drawText(`Sheet ${label(p.sheetId)} · ${p.kind === "markup" ? "marked-up print" : "field"} · ${p.createdBy} · ${when(p.takenAt)}`, {
+      x,
+      y: c.y - h - 11,
+      size: 8,
+      font: c.font,
+      color: MUTED,
+    });
+    rowH = Math.max(rowH, h + 20);
+    col = (col + 1) % 2;
+    if (col === 0) c.y -= rowH;
+  }
+  if (col === 1) c.y -= rowH;
 }

@@ -233,15 +233,21 @@ export async function buildDemoPdf(): Promise<Uint8Array> {
   return doc.save();
 }
 
-/** Crew markups for the demo job; sheetIds must be in page order. */
-export function buildDemoMarks(jobId: string, sheetIds: string[], now = new Date().toISOString()): Mark[] {
+/** Day the crew dated the marked-up sheets ("4222352 9/29/2026"). */
+export const DEMO_WORK_DAY = "2026-09-29";
+
+/** Crew markups for the demo job; sheetIds must be in page order. Timed through the work day. */
+export function buildDemoMarks(jobId: string, sheetIds: string[], day = DEMO_WORK_DAY): Mark[] {
   const marks: Mark[] = [];
-  const base = { jobId, createdBy: DEMO_USER, createdAt: now };
+  const start = new Date(`${day}T07:30:00`).getTime(); // local time
+  let n = 0;
+  // Each mark is stamped 12 minutes after the previous one.
+  const base = () => ({ jobId, createdBy: DEMO_USER, createdAt: new Date(start + n++ * 12 * 60_000).toISOString() });
   DEMO_PAGES.forEach((pg, i) => {
     const sheetId = sheetIds[i];
     pg.runs.forEach((r, k) =>
       marks.push({
-        ...base,
+        ...base(),
         id: `demo-run-${i + 1}-${k + 1}`,
         sheetId,
         kind: "run",
@@ -253,10 +259,10 @@ export function buildDemoMarks(jobId: string, sheetIds: string[], now = new Date
       }),
     );
     pg.spots.forEach((s, k) =>
-      marks.push({ ...base, id: `demo-spot-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [s.at], items: s.items, note: s.note }),
+      marks.push({ ...base(), id: `demo-spot-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [s.at], items: s.items, note: s.note }),
     );
     pg.removals.forEach((at, k) =>
-      marks.push({ ...base, id: `demo-rm-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [at], items: [], note: "Removal" }),
+      marks.push({ ...base(), id: `demo-rm-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [at], items: [], note: "Removal" }),
     );
   });
   return marks;
