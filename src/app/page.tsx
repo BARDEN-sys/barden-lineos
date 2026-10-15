@@ -62,11 +62,13 @@ export default function Home() {
               <span className="flex-1">
                 Signed in as <b>{displayName || "you"}</b>
               </span>
+              <Link href="/help" className="btn-ghost min-h-9 px-3 text-xs">❓ Help</Link>
               <Link href="/login" className="btn-ghost min-h-9 px-3 text-xs">Account</Link>
             </>
           ) : (
             <>
               <span className="flex-1 text-slate-600">Sign in to share projects with your crew.</span>
+              <Link href="/help" className="btn-ghost min-h-9 px-3 text-xs">❓ Help</Link>
               <Link href="/login" className="btn-primary min-h-9 px-3 text-xs">Sign in</Link>
             </>
           )}

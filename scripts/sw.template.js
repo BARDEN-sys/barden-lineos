@@ -6,7 +6,7 @@
 // __BUILD__ is replaced at build time (scripts/build-sw.mjs), so every deploy is a new
 // service worker: phones download it in the background and switch on next resume.
 const VERSION = "lineos-__BUILD__";
-const PAGES = ["/", "/job", "/login", "/crew"];
+const PAGES = ["/", "/job", "/login", "/crew", "/help"];
 const FILES = ["/pdf.worker.min.mjs", "/barden-logo.png", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 const CDN_HOSTS = ["cdn.jsdelivr.net", "tessdata.projectnaptha.com", "unpkg.com"];
 

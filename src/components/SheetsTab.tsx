@@ -9,6 +9,7 @@ import { DEFAULT_WORK_BOX } from "@/lib/output";
 import { currentUser } from "@/lib/user";
 import { type Mark, type MarkItem, type Photo, type Point, type Sheet } from "@/lib/types";
 import { CameraButtons } from "./CameraButtons";
+import { MeasureRun } from "./MeasureRun";
 import { VoiceButton } from "./VoiceButton";
 import { useJob } from "./JobProvider";
 import { PdfPageCanvas } from "./PdfPageCanvas";
@@ -243,6 +244,7 @@ function MarkList({ marks, onPick }: { marks: Mark[]; onPick: (id: string) => vo
 function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClose: () => void }) {
   const { job, dispatch } = useJob();
   const [m, setM] = useState<Mark>(mark);
+  const [measuring, setMeasuring] = useState(false);
   if (!job) return null;
   const masterCodes = new Set(job.master.map((x) => x.code));
   const codeOptions = [
@@ -283,8 +285,26 @@ function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClos
               ))}
             </span>
           )}
-          <span className="text-xs text-slate-500">Map and GPS measuring arrive in Milestone 3.</span>
+          <button type="button" className="btn-primary mt-1 self-start" onClick={() => setMeasuring(true)}>
+            📏 Measure on map / walk it
+          </button>
         </label>
+      )}
+      {measuring && (
+        <MeasureRun
+          streets={sheet.streets}
+          onClose={() => setMeasuring(false)}
+          onUse={(ft, how) => {
+            setMeasuring(false);
+            const stamp = how === "map" ? `Measured on map: ${ft} ft` : `Walked with GPS: ${ft} ft`;
+            const note = [m.note?.replace(/(Measured on map|Walked with GPS): \d+ ft( · )?/g, "").trim(), stamp].filter(Boolean).join(" · ");
+            // FOOTAGE codes on this run follow the measured length.
+            const items = m.items.map((it) =>
+              job.glossary.find((g) => g.code === it.code)?.unitType === "FOOTAGE" ? { ...it, qty: ft } : it,
+            );
+            save({ ...m, lengthFt: ft, items, note });
+          }}
+        />
       )}
 
       <div className="flex flex-col gap-2">

@@ -73,6 +73,9 @@ export default function JobPage() {
                         : "Shared"}
             </button>
           )}
+          <Link href="/help" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="Help">
+            ❓ Help
+          </Link>
           <Link href="/crew" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="Crew and invites">
             👥 {job.cloud ? (isForeman ? "Crew" : "Crew") : "Share"}
           </Link>
