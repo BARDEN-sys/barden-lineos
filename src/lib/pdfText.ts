@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist/types/src/display/api";
+import { installStreamIterator } from "./polyfills";
 import { mergeHeaders, parsePage, type ParsedPage, type TextItem } from "./printParse";
 import type { JobHeader } from "./types";
 
@@ -7,6 +8,7 @@ let pdfjsPromise: Promise<PdfjsModule> | null = null;
 
 /** Lazy-load pdf.js (legacy build: works on older phone browsers and in Node tests). */
 export function loadPdfjs(): Promise<PdfjsModule> {
+  installStreamIterator();
   pdfjsPromise ??= import("pdfjs-dist/legacy/build/pdf.mjs").then((m) => {
     if (typeof window !== "undefined") m.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
     return m;
