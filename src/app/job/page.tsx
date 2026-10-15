@@ -21,7 +21,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function JobPage() {
-  const { job, result, restoring, saveState, saveError, online } = useJob();
+  const { job, result, restoring, saveState, saveError, online, syncStatus, syncNotes, dismissSyncNotes, syncNow, isForeman } = useJob();
   const [tab, setTab] = useState<TabId>("sheets");
 
   if (!job && restoring) {
@@ -42,7 +42,7 @@ export default function JobPage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-900 text-white">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-3">
           <Link href="/" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="All projects and new project">
             ☰ Projects
           </Link>
@@ -54,6 +54,28 @@ export default function JobPage() {
             </p>
           </div>
           {!online && <span className="chip border-amber-300 bg-amber-100 text-amber-900">Offline</span>}
+          {job.cloud && (
+            <button
+              onClick={syncNow}
+              className={`chip ${syncStatus === "error" ? "border-red-400 bg-red-600 text-white" : syncStatus === "synced" ? "border-emerald-400 text-emerald-300" : "border-slate-600 text-slate-300"}`}
+              title="Sync with the crew now"
+            >
+              {syncStatus === "syncing"
+                ? "Syncing…"
+                : syncStatus === "synced"
+                  ? "Synced ✓"
+                  : syncStatus === "offline"
+                    ? "Will upload when online"
+                    : syncStatus === "signed-out"
+                      ? "Sign in to sync"
+                      : syncStatus === "error"
+                        ? "Sync problem"
+                        : "Shared"}
+            </button>
+          )}
+          <Link href="/crew" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="Crew and invites">
+            👥 {job.cloud ? (isForeman ? "Crew" : "Crew") : "Share"}
+          </Link>
           <span
             className={`chip ${saveState === "error" ? "border-red-400 bg-red-600 text-white" : "border-slate-600 text-slate-300"}`}
             title={saveError ?? undefined}
@@ -72,6 +94,24 @@ export default function JobPage() {
         </nav>
       </header>
 
+      {syncNotes.length > 0 && (
+        <div className="flex items-start gap-3 bg-red-600 px-4 py-2 text-sm text-white" role="alert">
+          <div className="flex-1">
+            <p className="font-semibold">Not accepted by the office — the shared numbers were kept:</p>
+            {syncNotes.map((n) => (
+              <p key={n}>{n}</p>
+            ))}
+          </div>
+          <button className="btn min-h-9 border border-white/50 px-3 text-xs" onClick={dismissSyncNotes}>
+            OK
+          </button>
+        </div>
+      )}
+      {job.cloud && !isForeman && (
+        <p className="bg-slate-800 px-4 py-1 text-xs text-slate-200">
+          Crew member on {job.cloud.crewName ?? "this crew"}: you can mark, add photos and daily rows. Master totals, task codes and final export are the foreman&apos;s.
+        </p>
+      )}
       {saveState === "error" && (
         <p className="bg-red-600 px-4 py-2 text-sm font-semibold text-white">
           Could not save on this phone: {saveError}. Keep the app open and free up storage space.

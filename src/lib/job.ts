@@ -1,12 +1,13 @@
 import { buildDemoMarks, buildDemoPdf, DEMO_WO } from "./demo";
 import { DEMO_MASTER, SEED_GLOSSARY } from "./glossary";
 import { extractPrint } from "./pdfText";
-import { DEMO_USER, type Job, type Sheet } from "./types";
+import type { Job, Sheet } from "./types";
+import { currentUser } from "./user";
 
 export const newId = (prefix: string) =>
   `${prefix}-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10)}`;
 
-export async function jobFromPrint(bytes: Uint8Array, pdfName: string, user = DEMO_USER): Promise<Job> {
+export async function jobFromPrint(bytes: Uint8Array, pdfName: string, user = currentUser()): Promise<Job> {
   const jobId = newId("job");
   const { header, pages } = await extractPrint(bytes);
   const sheets: Sheet[] = pages.map((p) => ({

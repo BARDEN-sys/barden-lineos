@@ -6,7 +6,8 @@ import { downscalePhoto } from "@/lib/image";
 import { newId } from "@/lib/job";
 import { parseSpokenCodes } from "@/lib/voice";
 import { DEFAULT_WORK_BOX } from "@/lib/output";
-import { DEMO_USER, type Mark, type MarkItem, type Photo, type Point, type Sheet } from "@/lib/types";
+import { currentUser } from "@/lib/user";
+import { type Mark, type MarkItem, type Photo, type Point, type Sheet } from "@/lib/types";
 import { CameraButtons } from "./CameraButtons";
 import { VoiceButton } from "./VoiceButton";
 import { useJob } from "./JobProvider";
@@ -78,7 +79,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
       points,
       lengthFt: kind === "run" ? sheet.footages[0] : undefined,
       items: [],
-      createdBy: DEMO_USER,
+      createdBy: currentUser(),
       createdAt: new Date().toISOString(),
     };
     dispatch({ type: "add-mark", mark });
@@ -410,7 +411,7 @@ function SheetPhotos({ sheet }: { sheet: Sheet }) {
             width,
             height,
             takenAt: new Date().toISOString(),
-            createdBy: DEMO_USER,
+            createdBy: currentUser(),
           },
         });
       }
@@ -477,7 +478,7 @@ function SheetPhotos({ sheet }: { sheet: Sheet }) {
 }
 
 function SheetTaskCodes({ sheet }: { sheet: Sheet }) {
-  const { job, dispatch } = useJob();
+  const { job, dispatch, isForeman } = useJob();
   if (!job || !job.master.length) return null;
   const changed = Object.keys(sheet.taskCodes ?? {}).length;
   return (
@@ -494,6 +495,7 @@ function SheetTaskCodes({ sheet }: { sheet: Sheet }) {
               <span className="w-14 font-mono font-semibold">{m.code}</span>
               <input
                 className={`input min-h-9 w-36 font-mono ${own ? "border-blue-400" : ""}`}
+                disabled={!isForeman}
                 aria-label={`${m.code} task code on sheet ${sheet.label}`}
                 placeholder={m.taskCode || "no master code"}
                 value={own}

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { billedTotals, billingCsv, byTaskCode, checkDailyEntry, resolveTaskCode, rowsFromMarks } from "@/lib/billing";
 import { activityDays, dayKey, dayLabel } from "@/lib/daily";
 import { newId } from "@/lib/job";
-import { DEMO_USER, type DailyEntry } from "@/lib/types";
+import type { DailyEntry } from "@/lib/types";
+import { currentUser } from "@/lib/user";
 import { useJob } from "./JobProvider";
 import { VoiceButton } from "./VoiceButton";
 
@@ -43,7 +44,7 @@ export function DailyTab() {
           unitCode,
           taskCode: resolveTaskCode(job!, sheetId, unitCode),
           qty: 0,
-          createdBy: DEMO_USER,
+          createdBy: currentUser(),
           createdAt: new Date().toISOString(),
         },
       ],
@@ -52,7 +53,7 @@ export function DailyTab() {
   }
 
   function fillFromMarks() {
-    const { rows: add, skipped, trimmed } = rowsFromMarks(job!, day, DEMO_USER, () => newId("day"));
+    const { rows: add, skipped, trimmed } = rowsFromMarks(job!, day, currentUser(), () => newId("day"));
     if (add.length) dispatch({ type: "add-daily", rows: add });
     const parts = [
       add.length ? `Added ${add.length} row${add.length > 1 ? "s" : ""} from the marks made on ${dayLabel(day)}.` : `No marks with master codes on ${dayLabel(day)}.`,

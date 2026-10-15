@@ -5,14 +5,18 @@ import { GlossaryEntry, UnitType } from "@/lib/types";
 import { useJob } from "./JobProvider";
 
 export function GlossaryTab() {
-  const { job, dispatch } = useJob();
+  const { job, dispatch, isForeman } = useJob();
   const [draft, setDraft] = useState({ code: "", description: "", unitType: "PAIRS" as UnitType });
   const [error, setError] = useState<string | null>(null);
   if (!job) return null;
   const set = (glossary: GlossaryEntry[]) => dispatch({ type: "glossary", glossary });
 
   return (
-    <section className="card flex flex-col gap-3">
+    <fieldset disabled={!isForeman} className="card flex min-w-0 flex-col gap-3">
+      {!isForeman && (
+        <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">🔒 Only the foreman can change this. You can see it.</p>
+      )}
+
       <div>
         <h2 className="font-bold">Code glossary</h2>
         <p className="text-sm text-slate-600">
@@ -63,6 +67,6 @@ export function GlossaryTab() {
         Add code
       </button>
       {error && <p className="text-sm text-red-700">{error}</p>}
-    </section>
+    </fieldset>
   );
 }

@@ -2,19 +2,30 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useAuth } from "@/components/AuthProvider";
 import { useJob } from "@/components/JobProvider";
 import { NewProject } from "@/components/NewProject";
 import { InstallApp } from "@/components/PwaSetup";
 import { demoJob } from "@/lib/job";
+import { listCloudProjects, type CloudProject } from "@/lib/cloud";
 import { deleteJob, listJobs, storageAvailable, type JobSummary } from "@/lib/storage";
 
 export default function Home() {
-  const { job, dispatch, openSavedJob, restoring, online } = useJob();
+  const { job, dispatch, openSavedJob, openCloudJob, restoring, online } = useJob();
+  const { userId, displayName, ready } = useAuth();
+  const [cloud, setCloud] = useState<CloudProject[]>([]);
   const [saved, setSaved] = useState<JobSummary[]>([]);
   const refresh = useCallback(() => {
     if (storageAvailable()) listJobs().then(setSaved).catch(() => setSaved([]));
   }, []);
   useEffect(refresh, [refresh, job?.id, restoring]);
+  useEffect(() => {
+    if (!userId || !online) return setCloud([]);
+    listCloudProjects().then(setCloud).catch(() => setCloud([]));
+  }, [userId, online, job?.id]);
+  const onPhone = new Set(saved.map((s) => s.id));
+  const toDownload = cloud.filter((c) => !onPhone.has(c.id));
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +54,61 @@ export default function Home() {
           across the sheets without going over master.
         </p>
       </header>
+
+      {ready && (
+        <section className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm shadow-sm">
+          {userId ? (
+            <>
+              <span className="flex-1">
+                Signed in as <b>{displayName || "you"}</b>
+              </span>
+              <Link href="/login" className="btn-ghost min-h-9 px-3 text-xs">Account</Link>
+            </>
+          ) : (
+            <>
+              <span className="flex-1 text-slate-600">Sign in to share projects with your crew.</span>
+              <Link href="/login" className="btn-primary min-h-9 px-3 text-xs">Sign in</Link>
+            </>
+          )}
+        </section>
+      )}
+
+      {toDownload.length > 0 && (
+        <section className="card flex flex-col gap-2 border-blue-300">
+          <h2 className="font-bold">Crew projects to download</h2>
+          <p className="text-xs text-slate-500">Shared with you. Download once; then it works with no signal and stays in sync.</p>
+          <ul className="divide-y divide-slate-100">
+            {toDownload.map((c) => (
+              <li key={c.id} className="flex items-center gap-3 py-2">
+                <span className="flex-1">
+                  <span className="block font-semibold">
+                    {c.header.name ? `${c.header.name} · ` : ""}WO {c.header.woNumber || "—"}
+                  </span>
+                  <span className="block text-xs text-slate-500">{c.crewName}</span>
+                </span>
+                <button
+                  className="btn-primary min-h-9"
+                  disabled={!!busy}
+                  onClick={async () => {
+                    setBusy(c.id);
+                    setError(null);
+                    try {
+                      await openCloudJob(c.id);
+                      router.push("/job");
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {busy === c.id ? "Downloading…" : "Download"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <NewProject busy={!!busy} onCreate={(newJob) => run("new", async () => ({ type: "set-job", job: newJob }))} />
 
@@ -78,6 +144,7 @@ export default function Home() {
                   <span className="block font-semibold">
                     {j.name ? `${j.name} · ` : ""}WO {j.woNumber || "—"}
                     {j.projectNumber && j.projectNumber !== j.woNumber && <span className="font-normal text-slate-500"> · Project {j.projectNumber}</span>}{" "}
+                    {j.shared && <span className="chip ml-1 border-blue-300 bg-blue-50 text-blue-800">shared</span>}
                     {j.id === job?.id && <span className="chip ml-1 border-emerald-300 bg-emerald-50 text-emerald-800">open</span>}
                   </span>
                   <span className="block text-xs text-slate-500">
@@ -105,7 +172,7 @@ export default function Home() {
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <footer className="mt-auto text-xs text-slate-500">
-        Projects save on this phone and work with no signal. Crew logins and upload to the office come in Milestone 4.
+        Projects save on this phone and work with no signal. Shared projects upload automatically when there&apos;s signal.
       </footer>
     </main>
   );

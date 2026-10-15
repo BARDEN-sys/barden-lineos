@@ -41,7 +41,16 @@ npm run build
     empty spot on the map to place it. Code callouts are yellow tags with arrows.
 - M2: photo of marked-up paper → detect highlights.
 - M3: map / GPS measuring (`GOOGLE_MAPS_API_KEY`).
-- M4: Supabase project, crew logins and invites — see [docs/addendum-crew-invites.md](docs/addendum-crew-invites.md).
+- **M4 (built):** crew logins and invites on LineOS's own Supabase project (see `supabase/`).
+  - Sign in with a 6-digit code by email (or by text once the SMS provider is switched on).
+  - Foreman shares a project with a crew; invite by **text** (opens your Messages app), **email**
+    (opens your Mail app), copy link, or a **QR code for the truck**; whole crew or one project;
+    Foreman or Crew role; change role / remove anytime; pending invites with resend / cancel.
+  - Shared projects sync both ways: edits upload when there is signal (offline work waits on the
+    phone), other people's changes arrive live, every mark/row shows who made it.
+  - The server blocks any code going over master across all crew edits and names who billed it.
+  - Crew members cannot change master totals, task codes or export final sheets.
+  - See [docs/addendum-crew-invites.md](docs/addendum-crew-invites.md).
 
 See [docs/SPEC.md](docs/SPEC.md) for the full build package.
 

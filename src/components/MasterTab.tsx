@@ -9,7 +9,7 @@ import { useJob } from "./JobProvider";
 import { VoiceButton } from "./VoiceButton";
 
 export function MasterTab() {
-  const { job, dispatch } = useJob();
+  const { job, dispatch, isForeman } = useJob();
   const [draft, setDraft] = useState<{ code: string; description: string; estQty: string }>({ code: "", description: "", estQty: "" });
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<MasterRow[] | null>(null);
@@ -48,7 +48,10 @@ export function MasterTab() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <fieldset disabled={!isForeman} className="flex min-w-0 flex-col gap-4">
+      {!isForeman && (
+        <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">🔒 Only the foreman can change this. You can see it.</p>
+      )}
       <ProjectDetails />
       <section className="card">
         <h2 className="mb-3 font-bold">Master unit list {job.header.woNumber && <span className="text-slate-500">· WO {job.header.woNumber}</span>}</h2>
@@ -156,7 +159,7 @@ export function MasterTab() {
           </div>
         )}
       </section>
-    </div>
+    </fieldset>
   );
 }
 

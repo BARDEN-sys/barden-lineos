@@ -2,8 +2,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { allocate, checkOverride, type AllocationResult, type OverrideCheck } from "@/lib/allocation";
-import { currentJobId, loadJob, requestPersistence, saveJob, storageAvailable } from "@/lib/storage";
-import { DEMO_USER, type Point, type Photo, type DailyEntry, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
+import { downloadJob, OfflineError, shareJob, syncJob, watchJob, type Crew } from "@/lib/cloud";
+import { currentJobId, getSyncState, loadJob, requestPersistence, saveJob, setSyncState, storageAvailable } from "@/lib/storage";
+import { useAuth } from "./AuthProvider";
+import { currentUser } from "@/lib/user";
+import { type Point, type Photo, type DailyEntry, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
 // The open job lives in memory and is saved to the phone (IndexedDB) after every change,
 // so it works with no signal and survives closing the app. M4 adds upload to Supabase
@@ -44,7 +47,7 @@ function reducer(job: Job | null, a: Action): Job | null {
     case "update-mark":
       return {
         ...job,
-        marks: job.marks.map((m) => (m.id === a.mark.id ? { ...a.mark, updatedBy: DEMO_USER, updatedAt: now } : m)),
+        marks: job.marks.map((m) => (m.id === a.mark.id ? { ...a.mark, updatedBy: currentUser(), updatedAt: now } : m)),
       };
     case "delete-mark":
       return { ...job, marks: job.marks.filter((m) => m.id !== a.id) };
@@ -54,7 +57,7 @@ function reducer(job: Job | null, a: Action): Job | null {
         ...job,
         overrides: [
           ...rest,
-          { jobId: job.id, sheetId: a.sheetId, code: a.code, qty: a.qty, locked: true, createdBy: DEMO_USER, createdAt: now },
+          { jobId: job.id, sheetId: a.sheetId, code: a.code, qty: a.qty, locked: true, createdBy: currentUser(), createdAt: now },
         ],
       };
     }
@@ -81,7 +84,7 @@ function reducer(job: Job | null, a: Action): Job | null {
     case "add-daily":
       return { ...job, daily: [...job.daily, ...a.rows] };
     case "update-daily":
-      return { ...job, daily: job.daily.map((r) => (r.id === a.row.id ? { ...a.row, updatedBy: DEMO_USER, updatedAt: now } : r)) };
+      return { ...job, daily: job.daily.map((r) => (r.id === a.row.id ? { ...a.row, updatedBy: currentUser(), updatedAt: now } : r)) };
     case "delete-daily":
       return { ...job, daily: job.daily.filter((r) => r.id !== a.id) };
     case "clear-override":
@@ -90,6 +93,8 @@ function reducer(job: Job | null, a: Action): Job | null {
 }
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
+/** local = only on this phone; signed-out = shared but nobody signed in on this phone. */
+export type SyncStatus = "local" | "signed-out" | "syncing" | "synced" | "offline" | "error";
 
 type Ctx = {
   job: Job | null;
@@ -103,11 +108,22 @@ type Ctx = {
   saveError: string | null;
   online: boolean;
   openSavedJob: (id: string) => Promise<boolean>;
+  syncStatus: SyncStatus;
+  /** Changes the office rejected on the last sync (e.g. over master), in plain words. */
+  syncNotes: string[];
+  dismissSyncNotes: () => void;
+  syncNow: () => void;
+  shareWith: (crew: Crew) => Promise<void>;
+  openCloudJob: (id: string) => Promise<void>;
+  /** Crew members cannot change master totals, task codes or approve export. */
+  isForeman: boolean;
 };
 
 const JobContext = createContext<Ctx | null>(null);
 
 const SAVE_DELAY_MS = 500;
+const SYNC_AFTER_EDIT_MS = 1500;
+const SYNC_EVERY_MS = 60_000;
 
 export function JobProvider({ children }: { children: ReactNode }) {
   const [job, dispatch] = useReducer(reducer, null);
@@ -120,6 +136,22 @@ export function JobProvider({ children }: { children: ReactNode }) {
   const persisted = useRef<Job | null>(null);
   const pending = useRef<Job | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { userId } = useAuth();
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("local");
+  const [syncNotes, setSyncNotes] = useState<string[]>([]);
+  const jobRef = useRef<Job | null>(null);
+  const lastSynced = useRef<Job | null>(null);
+  const syncing = useRef(false);
+  const syncAgain = useRef(false);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runSyncRef = useRef<() => Promise<void>>(async () => {});
+  const scheduleSync = useCallback((ms: number) => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => void runSyncRef.current(), ms);
+  }, []);
+  useEffect(() => {
+    jobRef.current = job;
+  }, [job]);
 
   // Saves run one at a time, in order, so an older copy never overwrites a newer one.
   const chain = useRef<Promise<void>>(Promise.resolve());
@@ -174,6 +206,103 @@ export function JobProvider({ children }: { children: ReactNode }) {
     timer.current = setTimeout(flush, SAVE_DELAY_MS);
   }, [job, flush]);
 
+  // ---------- Shared projects: two-way sync with the crew ----------
+  runSyncRef.current = async () => {
+    const start = jobRef.current;
+    if (!start?.cloud) return setSyncStatus("local");
+    if (!userId) return setSyncStatus("signed-out");
+    if (typeof navigator !== "undefined" && !navigator.onLine) return setSyncStatus("offline");
+    if (syncing.current) {
+      syncAgain.current = true;
+      return;
+    }
+    syncing.current = true;
+    setSyncStatus("syncing");
+    try {
+      const res = await syncJob(start, await getSyncState(start.id));
+      if (jobRef.current === start) {
+        await setSyncState(start.id, res.state);
+        lastSynced.current = res.job;
+        dispatch({ type: "set-job", job: res.job });
+      } else {
+        syncAgain.current = true; // edited while syncing: go again with the newer copy
+      }
+      if (res.rejected.length) setSyncNotes(res.rejected);
+      setSyncStatus("synced");
+    } catch (e) {
+      if (e instanceof OfflineError) setSyncStatus("offline");
+      else {
+        setSyncStatus("error");
+        setSyncNotes([e instanceof Error ? e.message : String(e)]);
+      }
+    } finally {
+      syncing.current = false;
+      if (syncAgain.current) {
+        syncAgain.current = false;
+        scheduleSync(800);
+      }
+    }
+  };
+
+  // After a local edit to a shared project, send it shortly after.
+  useEffect(() => {
+    if (!job?.cloud) {
+      setSyncStatus("local");
+      return;
+    }
+    if (job !== lastSynced.current) scheduleSync(SYNC_AFTER_EDIT_MS);
+  }, [job, scheduleSync]);
+
+  // Live: someone else changed the project; also every minute and when signal returns.
+  const sharedId = job?.cloud ? job.id : null;
+  useEffect(() => {
+    if (!sharedId || !userId) return;
+    scheduleSync(0);
+    const stop = watchJob(sharedId, () => scheduleSync(700));
+    const every = setInterval(() => {
+      if (document.visibilityState === "visible") scheduleSync(0);
+    }, SYNC_EVERY_MS);
+    const onOnline = () => scheduleSync(0);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleSync(0);
+    };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stop();
+      clearInterval(every);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [sharedId, userId, scheduleSync]);
+
+  const shareWith = useCallback(async (crew: Crew) => {
+    const current = jobRef.current;
+    if (!current) return;
+    const shared = await shareJob(current, crew);
+    dispatch({ type: "set-job", job: shared });
+  }, []);
+
+  const openCloudJob = useCallback(
+    async (id: string) => {
+      await flush();
+      const local = await loadJob(id).catch(() => null);
+      if (local?.cloud) {
+        persisted.current = local;
+        dispatch({ type: "set-job", job: local });
+        pending.current = local;
+        await flush();
+        scheduleSync(0);
+        return;
+      }
+      const { job: fresh, state } = await downloadJob(id);
+      await setSyncState(id, state);
+      lastSynced.current = fresh;
+      dispatch({ type: "set-job", job: fresh });
+    },
+    [flush, scheduleSync],
+  );
+
   // Write right away when the app goes to the background (phone locked, app switched).
   useEffect(() => {
     const onHide = () => {
@@ -219,7 +348,26 @@ export function JobProvider({ children }: { children: ReactNode }) {
     [job],
   );
   return (
-    <JobContext.Provider value={{ job, result, dispatch, setOverride, restoring, saveState, saveError, online, openSavedJob }}>
+    <JobContext.Provider
+      value={{
+        job,
+        result,
+        dispatch,
+        setOverride,
+        restoring,
+        saveState,
+        saveError,
+        online,
+        openSavedJob,
+        syncStatus,
+        syncNotes,
+        dismissSyncNotes: () => setSyncNotes([]),
+        syncNow: () => scheduleSync(0),
+        shareWith,
+        openCloudJob,
+        isForeman: !job?.cloud || job.cloud.role === "foreman",
+      }}
+    >
       {children}
     </JobContext.Provider>
   );

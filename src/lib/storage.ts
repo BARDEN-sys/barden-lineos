@@ -1,3 +1,4 @@
+import type { SyncState } from "./cloudRows";
 import type { Job, Photo } from "./types";
 
 // On-phone storage (IndexedDB) so a job survives closing the app, a reload or a dead
@@ -24,6 +25,7 @@ export type JobSummary = {
   dailyRows: number;
   photos: number;
   savedAt: string;
+  shared: boolean;
 };
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -141,6 +143,7 @@ export async function listJobs(): Promise<JobSummary[]> {
       dailyRows: (r.daily ?? []).length,
       photos: r.photos.length,
       savedAt: r.savedAt,
+      shared: !!r.cloud,
     }))
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
@@ -151,6 +154,7 @@ export async function deleteJob(id: string): Promise<void> {
   const tx = db.transaction(["jobs", "pdfs", "photos", "meta"], "readwrite");
   tx.objectStore("jobs").delete(id);
   tx.objectStore("pdfs").delete(id);
+  tx.objectStore("meta").delete(`sync:${id}`);
   for (const p of photoIds) tx.objectStore("photos").delete(p);
   const meta = tx.objectStore("meta");
   const cur = meta.get("currentJobId");
@@ -172,4 +176,18 @@ export async function requestPersistence(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------- Shared-project sync bookkeeping (what was last uploaded) ----------
+
+export async function getSyncState(jobId: string): Promise<SyncState | null> {
+  const db = await openDb();
+  return ((await done(db.transaction("meta", "readonly").objectStore("meta").get(`sync:${jobId}`))) as SyncState | undefined) ?? null;
+}
+
+export async function setSyncState(jobId: string, state: SyncState): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction("meta", "readwrite");
+  tx.objectStore("meta").put(state, `sync:${jobId}`);
+  await finished(tx);
 }

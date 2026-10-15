@@ -4,7 +4,7 @@ import { useState } from "react";
 import { renderSheets, summaryCsv } from "@/lib/output";
 import { activityDays, buildDailyReport, dayKey, dayLabel } from "@/lib/daily";
 import { buildJobReport } from "@/lib/report";
-import { DEMO_USER } from "@/lib/types";
+import { currentUser } from "@/lib/user";
 import { Flags } from "./AllocationTab";
 import { useJob } from "./JobProvider";
 
@@ -24,9 +24,9 @@ const today = () => {
 };
 
 export function ExportTab() {
-  const { job, result } = useJob();
+  const { job, result, isForeman } = useJob();
   const [date, setDate] = useState(today);
-  const [preparedBy, setPreparedBy] = useState(DEMO_USER);
+  const [preparedBy, setPreparedBy] = useState(currentUser);
   const [day, setDay] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +68,8 @@ export function ExportTab() {
     }
   }
 
-  const blocked = !result.canExport || !job.master.length;
+  // Approving the final export is the foreman's job (crew can still make reports).
+  const blocked = !result.canExport || !job.master.length || !isForeman;
 
   return (
     <div className="flex flex-col gap-4">
@@ -92,6 +93,7 @@ export function ExportTab() {
           </button>
         </div>
         {!job.master.length && <p className="text-sm text-amber-800">Add the master unit list before exporting.</p>}
+        {!isForeman && <p className="text-sm text-slate-700">🔒 Only the foreman approves and exports the final sheets.</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}
       </section>
       <section className="card flex flex-col gap-3">

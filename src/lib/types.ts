@@ -142,6 +142,9 @@ export const DailyEntry = z.object({
 });
 export type DailyEntry = z.infer<typeof DailyEntry>;
 
+export type CrewRole = "foreman" | "crew";
+export type CloudLink = { crewId: string; role: CrewRole; crewName?: string };
+
 export type Job = {
   id: string;
   header: JobHeader;
@@ -154,6 +157,8 @@ export type Job = {
   overrides: Override[];
   photos: Photo[];
   daily: DailyEntry[];
+  /** Set once the project is shared with a crew (M4). Absent = only on this phone. */
+  cloud?: CloudLink;
   createdBy: string;
   createdAt: string;
 };

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AuthProvider } from "@/components/AuthProvider";
 import { JobProvider } from "@/components/JobProvider";
 import { PwaSetup } from "@/components/PwaSetup";
 import "./globals.css";
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-dvh bg-slate-100 text-slate-900 antialiased">
         <PwaSetup />
-        <JobProvider>{children}</JobProvider>
+        <AuthProvider>
+          <JobProvider>{children}</JobProvider>
+        </AuthProvider>
       </body>
     </html>
   );
