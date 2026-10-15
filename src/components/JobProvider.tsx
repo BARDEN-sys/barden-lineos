@@ -1,11 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { allocate, checkOverride, type AllocationResult, type OverrideCheck } from "@/lib/allocation";
+import { currentJobId, loadJob, requestPersistence, saveJob, storageAvailable } from "@/lib/storage";
 import { DEMO_USER, type Point, type Photo, type DailyEntry, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
-// M1 demo mode: the job lives in memory for this browser tab. M4 swaps this store for
-// Supabase (same record shapes, created_by from the signed-in user).
+// The open job lives in memory and is saved to the phone (IndexedDB) after every change,
+// so it works with no signal and survives closing the app. M4 adds upload to Supabase
+// (same record shapes, created_by from the signed-in user).
 
 type Action =
   | { type: "set-job"; job: Job | null }
@@ -87,19 +89,126 @@ function reducer(job: Job | null, a: Action): Job | null {
   }
 }
 
+export type SaveState = "idle" | "saving" | "saved" | "error";
+
 type Ctx = {
   job: Job | null;
   result: AllocationResult | null;
   dispatch: (a: Action) => void;
   /** Sets and locks a sheet's number for a code; over-master values are rejected. */
   setOverride: (sheetId: string, code: string, qty: number) => OverrideCheck;
+  /** True while the last open job is being read back from the phone. */
+  restoring: boolean;
+  saveState: SaveState;
+  saveError: string | null;
+  online: boolean;
+  openSavedJob: (id: string) => Promise<boolean>;
 };
 
 const JobContext = createContext<Ctx | null>(null);
 
+const SAVE_DELAY_MS = 500;
+
 export function JobProvider({ children }: { children: ReactNode }) {
   const [job, dispatch] = useReducer(reducer, null);
+  const [restoring, setRestoring] = useState(true);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [online, setOnline] = useState(true);
   const result = useMemo(() => (job ? allocate(job) : null), [job]);
+  // The job as last read from / written to the phone; skips saving what was just loaded.
+  const persisted = useRef<Job | null>(null);
+  const pending = useRef<Job | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Saves run one at a time, in order, so an older copy never overwrites a newer one.
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const flush = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const toSave = pending.current;
+    pending.current = null;
+    if (!toSave) return chain.current;
+    setSaveState("saving");
+    chain.current = chain.current.then(async () => {
+      try {
+        await saveJob(toSave);
+        persisted.current = toSave;
+        if (!pending.current) setSaveState("saved");
+        setSaveError(null);
+      } catch (e) {
+        setSaveState("error");
+        setSaveError(e instanceof Error ? e.message : String(e));
+      }
+    });
+    return chain.current;
+  }, []);
+
+  // Reopen the last job on start (works with no signal).
+  useEffect(() => {
+    if (!storageAvailable()) return setRestoring(false);
+    requestPersistence();
+    (async () => {
+      try {
+        const id = await currentJobId();
+        const saved = id ? await loadJob(id) : null;
+        if (saved) {
+          persisted.current = saved;
+          dispatch({ type: "set-job", job: saved });
+          setSaveState("saved");
+        }
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setRestoring(false);
+      }
+    })();
+  }, []);
+
+  // Save every change shortly after it happens.
+  useEffect(() => {
+    if (!job || job === persisted.current || !storageAvailable()) return;
+    pending.current = job;
+    setSaveState("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, SAVE_DELAY_MS);
+  }, [job, flush]);
+
+  // Write right away when the app goes to the background (phone locked, app switched).
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onHide);
+    };
+  }, [flush]);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  const openSavedJob = useCallback(async (id: string) => {
+    await flush();
+    const saved = await loadJob(id);
+    if (!saved) return false;
+    persisted.current = saved;
+    dispatch({ type: "set-job", job: saved });
+    pending.current = saved; // marks it as the current job on the phone
+    await flush();
+    return true;
+  }, [flush]);
+
   const setOverride = useCallback(
     (sheetId: string, code: string, qty: number): OverrideCheck => {
       if (!job) return { ok: false, error: "No job open." };
@@ -109,7 +218,11 @@ export function JobProvider({ children }: { children: ReactNode }) {
     },
     [job],
   );
-  return <JobContext.Provider value={{ job, result, dispatch, setOverride }}>{children}</JobContext.Provider>;
+  return (
+    <JobContext.Provider value={{ job, result, dispatch, setOverride, restoring, saveState, saveError, online, openSavedJob }}>
+      {children}
+    </JobContext.Provider>
+  );
 }
 
 export function useJob(): Ctx {

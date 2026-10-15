@@ -1,12 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useJob } from "@/components/JobProvider";
+import { InstallApp } from "@/components/PwaSetup";
 import { demoJob, jobFromPrint } from "@/lib/job";
+import { deleteJob, listJobs, storageAvailable, type JobSummary } from "@/lib/storage";
 
 export default function Home() {
-  const { job, dispatch } = useJob();
+  const { job, dispatch, openSavedJob, restoring, online } = useJob();
+  const [saved, setSaved] = useState<JobSummary[]>([]);
+  const refresh = useCallback(() => {
+    if (storageAvailable()) listJobs().then(setSaved).catch(() => setSaved([]));
+  }, []);
+  useEffect(refresh, [refresh, job?.id, restoring]);
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -66,15 +73,54 @@ export default function Home() {
         </button>
       </section>
 
-      {job && (
-        <button className="btn-ghost" onClick={() => router.push("/job")}>
-          Back to open job (WO {job.header.woNumber || job.pdfName})
-        </button>
+      <InstallApp />
+      {!online && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">No signal — you can keep working. Everything saves on this phone.</p>}
+
+      {saved.length > 0 && (
+        <section className="card flex flex-col gap-2">
+          <h2 className="font-bold">Jobs saved on this phone</h2>
+          <ul className="divide-y divide-slate-100">
+            {saved.map((j) => (
+              <li key={j.id} className="flex items-center gap-3 py-2">
+                <button
+                  className="flex-1 text-left"
+                  disabled={!!busy}
+                  onClick={async () => {
+                    setBusy(j.id);
+                    if (j.id === job?.id || (await openSavedJob(j.id))) router.push("/job");
+                    else setError("That job could not be opened.");
+                    setBusy(null);
+                  }}
+                >
+                  <span className="block font-semibold">
+                    WO {j.woNumber || "—"} {j.id === job?.id && <span className="chip ml-1 border-emerald-300 bg-emerald-50 text-emerald-800">open</span>}
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    {j.sheets} sheets · {j.marks} marks · {j.dailyRows} daily rows · {j.photos} photos · saved{" "}
+                    {new Date(j.savedAt).toLocaleString("en-US", { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                </button>
+                <button
+                  className="btn min-h-9 px-2 text-red-700"
+                  aria-label={`Delete WO ${j.woNumber} from this phone`}
+                  onClick={async () => {
+                    if (!window.confirm(`Delete WO ${j.woNumber || j.pdfName} from this phone? This cannot be undone.`)) return;
+                    await deleteJob(j.id);
+                    if (j.id === job?.id) dispatch({ type: "set-job", job: null });
+                    refresh();
+                  }}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <footer className="mt-auto text-xs text-slate-500">
-        Demo mode — jobs stay in this browser tab only. Crew logins and saved jobs come in Milestone 4.
+        Jobs save on this phone and work with no signal. Crew logins and upload to the office come in Milestone 4.
       </footer>
     </main>
   );

@@ -45,6 +45,23 @@ npm run build
 
 See [docs/SPEC.md](docs/SPEC.md) for the full build package.
 
+## Offline and automatic updates
+
+- **Install:** Android/Chrome shows "Install LineOS on this phone"; iPhone: Share → Add to
+  Home Screen. Icons come from the BARDEN logo.
+- **Works with no signal:** after the app has been opened online once, the service worker
+  (`scripts/sw.template.js` → `public/sw.js` at build) serves the app offline. Print reading,
+  marking, allocation, daily input and all PDFs/CSVs run on the phone.
+- **Saves automatically on the phone:** every change is written to IndexedDB
+  (`src/lib/storage.ts`) half a second after it is made, and immediately when the app goes
+  to the background. Jobs survive closing the app or a dead battery; the home screen lists
+  the jobs saved on that phone. Header shows "Saved on phone ✓" and "Offline".
+- **Updates automatically:** each deploy gets a new service-worker build id. The app checks
+  for updates when opened, when brought back, and every 30 minutes; the new version is
+  downloaded in the background and takes over the next time the app is brought back.
+- Still needs signal: OCR the first time (it downloads its language data, then it is cached),
+  voice on Android, Google Maps (M3). Upload to the office comes with M4 logins.
+
 ## Demo job (WO 4222352)
 
 Laid out after the crew's marked-up paper prints (photos 10/8/2026): Tarpon Dr splices 1–2

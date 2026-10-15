@@ -8,3 +8,4 @@ next-env.d.ts
 public/pdf.worker.min.mjs
 .vercel
 coverage
+public/sw.js

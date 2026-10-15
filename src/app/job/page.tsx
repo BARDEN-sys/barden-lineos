@@ -21,9 +21,12 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function JobPage() {
-  const { job, result } = useJob();
+  const { job, result, restoring, saveState, saveError, online } = useJob();
   const [tab, setTab] = useState<TabId>("sheets");
 
+  if (!job && restoring) {
+    return <main className="mx-auto max-w-lg px-4 py-10 text-slate-600">Opening your job…</main>;
+  }
   if (!job) {
     return (
       <main className="mx-auto flex max-w-lg flex-col gap-4 px-4 py-10">
@@ -48,6 +51,13 @@ export default function JobPage() {
               {job.sheets.length} sheets · {job.marks.length} marks
             </p>
           </div>
+          {!online && <span className="chip border-amber-300 bg-amber-100 text-amber-900">Offline</span>}
+          <span
+            className={`chip ${saveState === "error" ? "border-red-400 bg-red-600 text-white" : "border-slate-600 text-slate-300"}`}
+            title={saveError ?? undefined}
+          >
+            {saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved!" : "Saved on phone ✓"}
+          </span>
           {over > 0 && <span className="chip border-red-400 bg-red-600 text-white">Over master</span>}
           {flags > 0 && <span className="chip border-amber-300 bg-amber-400 text-amber-950">{flags} flag{flags > 1 ? "s" : ""}</span>}
         </div>
@@ -60,6 +70,11 @@ export default function JobPage() {
         </nav>
       </header>
 
+      {saveState === "error" && (
+        <p className="bg-red-600 px-4 py-2 text-sm font-semibold text-white">
+          Could not save on this phone: {saveError}. Keep the app open and free up storage space.
+        </p>
+      )}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-4 pb-24 sm:pb-8">
         {tab === "sheets" && <SheetsTab />}
         {tab === "master" && <MasterTab />}
