@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { normalizeContact, useAuth } from "./AuthProvider";
+import { useAuth } from "./AuthProvider";
 
-/** Sign in with a 6-digit code sent to your email or cell, then (first time) your name. */
+/** Sign in with a 6-digit code (or link) sent to your email, then (first time) your name. */
 export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; title?: string }) {
   const { userId, profile, sendCode, verifyCode, saveName } = useAuth();
   const [to, setTo] = useState("");
@@ -48,21 +48,20 @@ export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; tit
     );
   }
 
-  const channel = sentTo ? normalizeContact(sentTo).channel : null;
-
   return (
     <section className="card flex flex-col gap-3">
       <h2 className="text-lg font-bold">{title}</h2>
       {!sentTo ? (
         <>
           <label className="flex flex-col gap-1 text-sm">
-            Your email or cell number
+            Your email
             <input
               className="input"
               autoFocus
+              type="email"
               inputMode="email"
               autoComplete="email"
-              placeholder="you@example.com or (813) 555-0100"
+              placeholder="you@example.com"
               value={to}
               onChange={(e) => setTo(e.target.value)}
             />
@@ -81,13 +80,13 @@ export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; tit
           >
             {busy ? "Sending…" : "Send me a code"}
           </button>
-          <p className="text-xs text-slate-500">We send a 6-digit code. No password to remember.</p>
+          <p className="text-xs text-slate-500">We email you a 6-digit code. No password to remember.</p>
         </>
       ) : (
         <>
           <p className="text-sm text-slate-700">
-            We sent a 6-digit code {channel === "email" ? "by email" : "by text"} to <b>{sentTo}</b>. Type it here.
-            {channel === "email" && " Check spam if you don't see it."}
+            We emailed a 6-digit code to <b>{sentTo}</b>. Type it here. Check spam / junk if you don&apos;t see it in a
+            minute. (If the email has a sign-in link instead, tapping it works too.)
           </p>
           <input
             className="input text-center font-mono text-2xl tracking-[0.4em]"
@@ -113,7 +112,7 @@ export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; tit
             {busy ? "Checking…" : "Sign in"}
           </button>
           <button className="btn-ghost" onClick={() => { setSentTo(null); setCode(""); setError(null); }}>
-            Use a different email or number
+            Use a different email
           </button>
         </>
       )}

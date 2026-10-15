@@ -5,8 +5,8 @@ import { getProfile, setDisplayName, type Profile } from "@/lib/cloud";
 import { supabase } from "@/lib/supabase";
 import { setCurrentUser } from "@/lib/user";
 
-// Crew logins: a 6-digit code by email (free) or by text (needs the SMS provider switched on
-// in Supabase). Codes are typed into the app, so it works from the installed home-screen app.
+// Crew logins: a 6-digit code (or a sign-in link) by email. Codes are typed into the app, so
+// it works from the installed home-screen app. (Text-message codes are not used.)
 
 type Auth = {
   ready: boolean;
@@ -84,11 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendCode = useCallback(async (to: string) => {
     const c = normalizeContact(to);
-    const sb = supabase();
-    const res =
-      c.channel === "email"
-        ? await sb.auth.signInWithOtp({ email: c.value, options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/login` } })
-        : await sb.auth.signInWithOtp({ phone: c.value, options: { shouldCreateUser: true } });
+    if (c.channel !== "email") return { ok: false, error: "Enter your email address.", channel: c.channel };
+    const res = await supabase().auth.signInWithOtp({
+      email: c.value,
+      options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/login` },
+    });
     return res.error ? { ok: false, error: friendlyAuthError(res.error.message), channel: c.channel } : { ok: true, channel: c.channel };
   }, []);
 
@@ -96,10 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const c = normalizeContact(to);
     const token = code.replace(/\D/g, "");
     const sb = supabase();
-    const res =
-      c.channel === "email"
-        ? await sb.auth.verifyOtp({ email: c.value, token, type: "email" })
-        : await sb.auth.verifyOtp({ phone: c.value, token, type: "sms" });
+    const res = await sb.auth.verifyOtp({ email: c.value, token, type: "email" });
     if (res.error) return { ok: false, error: friendlyAuthError(res.error.message) };
     const id = res.data.user?.id ?? null;
     setUserId(id);

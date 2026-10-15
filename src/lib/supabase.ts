@@ -9,7 +9,8 @@ let client: SupabaseClient | null = null;
 
 export function supabase(): SupabaseClient {
   client ??= createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "lineos-auth" },
+    // "implicit" so a sign-in link works even when opened in a different browser (e.g. from Outlook).
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit", storageKey: "lineos-auth" },
   });
   return client;
 }
