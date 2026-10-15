@@ -1,0 +1,117 @@
+import { z } from "zod";
+
+// Every record that a crew member can create carries jobId + createdBy + createdAt
+// so M4 (Supabase, crew logins, audit trail) can persist it without reshaping data.
+
+export const UnitType = z.enum(["FOOTAGE", "PAIRS", "EACH"]);
+export type UnitType = z.infer<typeof UnitType>;
+
+export const CODE_PATTERN = /^[A-Z]\d{2}[A-Z]\d?$/;
+export const UnitCode = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .regex(CODE_PATTERN, "Code looks like S10B or P22K1");
+
+export const GlossaryEntry = z.object({
+  code: UnitCode,
+  description: z.string().trim().min(1),
+  unitType: UnitType,
+});
+export type GlossaryEntry = z.infer<typeof GlossaryEntry>;
+
+export const MasterItem = z.object({
+  code: UnitCode,
+  description: z.string().trim(),
+  estQty: z.number().int().nonnegative(),
+});
+export type MasterItem = z.infer<typeof MasterItem>;
+
+/** Normalised page coordinates: 0..1 from the top-left of the page. */
+export const Point = z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]);
+export type Point = z.infer<typeof Point>;
+
+/** One code and quantity claimed at a marked location (e.g. S10B, 50 pairs). */
+export const MarkItem = z.object({
+  code: UnitCode,
+  qty: z.number().int().nonnegative(),
+});
+export type MarkItem = z.infer<typeof MarkItem>;
+
+export const MarkKind = z.enum(["run", "spot"]);
+export type MarkKind = z.infer<typeof MarkKind>;
+
+export const Mark = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  sheetId: z.string(),
+  kind: MarkKind,
+  /** run: polyline (>= 2 points); spot: exactly 1 point. */
+  points: z.array(Point).min(1),
+  lengthFt: z.number().nonnegative().optional(),
+  pairCount: z.number().int().nonnegative().optional(),
+  items: z.array(MarkItem),
+  note: z.string().optional(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type Mark = z.infer<typeof Mark>;
+
+/** A crew override of the engine's number for one code on one sheet. */
+export const Override = z.object({
+  jobId: z.string(),
+  sheetId: z.string(),
+  code: UnitCode,
+  qty: z.number().int().nonnegative(),
+  locked: z.boolean(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+});
+export type Override = z.infer<typeof Override>;
+
+/** Rectangle in PDF user space (points, origin bottom-left) — matches pdf-lib. */
+export const PdfRect = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() });
+export type PdfRect = z.infer<typeof PdfRect>;
+
+export const Sheet = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  pageIndex: z.number().int().nonnegative(),
+  label: z.string(),
+  widthPt: z.number().positive(),
+  heightPt: z.number().positive(),
+  streets: z.array(z.string()),
+  cableLabels: z.array(z.string()),
+  footages: z.array(z.number()),
+  tags: z.array(z.string()),
+  notes: z.array(z.string()),
+  codesFound: z.array(z.string()),
+  unitsBlock: PdfRect.optional(),
+});
+export type Sheet = z.infer<typeof Sheet>;
+
+export const JobHeader = z.object({
+  woNumber: z.string(),
+  projectNumber: z.string(),
+  engineers: z.array(z.string()),
+});
+export type JobHeader = z.infer<typeof JobHeader>;
+
+export type Job = {
+  id: string;
+  header: JobHeader;
+  pdfName: string;
+  pdfBytes: Uint8Array | null;
+  sheets: Sheet[];
+  master: MasterItem[];
+  glossary: GlossaryEntry[];
+  marks: Mark[];
+  overrides: Override[];
+  createdBy: string;
+  createdAt: string;
+};
+
+/** Demo mode has no auth; M4 replaces this with the signed-in user id. */
+export const DEMO_USER = "demo-foreman";

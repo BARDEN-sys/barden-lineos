@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+/* Big touch targets: crews use this on phones in the field. */
+@utility btn {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-40;
+}
+@utility btn-primary {
+  @apply btn bg-slate-900 text-white hover:bg-slate-800;
+}
+@utility btn-ghost {
+  @apply btn border border-slate-300 bg-white text-slate-900 hover:bg-slate-50;
+}
+@utility btn-danger {
+  @apply btn border border-red-300 bg-white text-red-700 hover:bg-red-50;
+}
+@utility input {
+  @apply min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-base outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10;
+}
+@utility card {
+  @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm;
+}
+@utility chip {
+  @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium;
+}
