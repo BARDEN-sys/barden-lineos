@@ -18,6 +18,9 @@ type Auth = {
   /** Sign in with the link copied from the email (works inside the home-screen app). */
   verifyLink: (link: string) => Promise<{ ok: boolean; error?: string }>;
   saveName: (name: string) => Promise<void>;
+  /** Email + password sign-in (after the person has set a password once). */
+  signInWithPassword: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  setPassword: (password: string) => Promise<{ ok: boolean; error?: string }>;
   signOut: () => Promise<void>;
 };
 
@@ -133,6 +136,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadProfile],
   );
 
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
+      const res = await supabase().auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (res.error) {
+        const msg = /invalid login credentials/i.test(res.error.message)
+          ? "Wrong email or password. If you haven't set a password yet, use the email code."
+          : friendlyAuthError(res.error.message);
+        return { ok: false, error: msg };
+      }
+      const id = res.data.user?.id ?? null;
+      setUserId(id);
+      await loadProfile(id);
+      return { ok: true };
+    },
+    [loadProfile],
+  );
+
+  const setPassword = useCallback(async (password: string) => {
+    if (password.length < 8) return { ok: false, error: "Use at least 8 characters." };
+    const res = await supabase().auth.updateUser({ password });
+    return res.error ? { ok: false, error: friendlyAuthError(res.error.message) } : { ok: true };
+  }, []);
+
   const saveName = useCallback(
     async (name: string) => {
       if (!userId) return;
@@ -152,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const displayName = profile?.display_name || profile?.email || profile?.phone || "";
 
   return (
-    <AuthContext.Provider value={{ ready, userId, profile, displayName, sendCode, verifyCode, verifyLink, saveName, signOut }}>
+    <AuthContext.Provider value={{ ready, userId, profile, displayName, sendCode, verifyCode, verifyLink, saveName, signInWithPassword, setPassword, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5,7 +5,9 @@ import { useAuth } from "./AuthProvider";
 
 /** Sign in with a 6-digit code (or link) sent to your email, then (first time) your name. */
 export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; title?: string }) {
-  const { userId, profile, sendCode, verifyCode, verifyLink, saveName } = useAuth();
+  const { userId, profile, sendCode, verifyCode, verifyLink, saveName, signInWithPassword } = useAuth();
+  const [password, setPw] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
   const [link, setLink] = useState("");
   const [to, setTo] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -82,6 +84,36 @@ export function SignIn({ onDone, title = "Sign in" }: { onDone?: () => void; tit
             {busy ? "Sending…" : "Send me a code"}
           </button>
           <p className="text-xs text-slate-500">We email you a 6-digit code. No password to remember.</p>
+          {!usePassword ? (
+            <button className="text-left text-sm text-blue-700 underline" onClick={() => setUsePassword(true)}>
+              I set a password — sign in with it
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+              <input
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPw(e.target.value)}
+              />
+              <button
+                className="btn-primary"
+                disabled={!to.trim() || !password || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError(null);
+                  const r = await signInWithPassword(to, password);
+                  setBusy(false);
+                  if (!r.ok) setError(r.error ?? "Could not sign in.");
+                  else onDone?.();
+                }}
+              >
+                Sign in with password
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <>
