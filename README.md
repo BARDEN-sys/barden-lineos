@@ -29,8 +29,7 @@ npm run build
   - **Voice:** on a mark, say "S10B 50, P22K1 1" to fill codes, or dictate a note (browser
     speech recognition; falls back to the phone keyboard's mic key).
   - **Job report PDF:** BARDEN logo, units vs master, flags, work by sheet, crew marks and
-    changes (who / when), photos. Put the logo at `public/barden-logo.png` (PNG or JPEG);
-    without it the report shows a BARDEN wordmark.
+    changes (who / when), photos. The logo is `public/barden-logo.png`.
   - **WORK PERFORMED box:** blue table like the crew's finished sheets; tap "Box" and then an
     empty spot on the map to place it. Code callouts are yellow tags with arrows.
 - M2: photo of marked-up paper → detect highlights.

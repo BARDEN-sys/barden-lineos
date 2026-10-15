@@ -28,8 +28,9 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col gap-6 px-4 py-10">
       <header>
-        <p className="text-xs font-bold tracking-[0.2em] text-slate-500">BARDEN</p>
-        <h1 className="text-3xl font-black tracking-tight">LineOS</h1>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/barden-logo.png" alt="BARDEN" className="h-10 w-auto" />
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-[#1f4690]">LineOS</h1>
         <p className="mt-2 text-slate-600">
           Upload the work print and master unit list, mark the highlighted work, and LineOS spreads the unit codes
           across the sheets without going over master.
