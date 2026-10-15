@@ -25,13 +25,13 @@ export default function JobPage() {
   const [tab, setTab] = useState<TabId>("sheets");
 
   if (!job && restoring) {
-    return <main className="mx-auto max-w-lg px-4 py-10 text-slate-600">Opening your job…</main>;
+    return <main className="mx-auto max-w-lg px-4 py-10 text-slate-600">Opening your project…</main>;
   }
   if (!job) {
     return (
       <main className="mx-auto flex max-w-lg flex-col gap-4 px-4 py-10">
-        <p>No job open in this tab.</p>
-        <Link href="/" className="btn-primary self-start">Start a job</Link>
+        <p>No project open.</p>
+        <Link href="/" className="btn-primary self-start">Projects</Link>
       </main>
     );
   }
@@ -43,11 +43,11 @@ export default function JobPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-900 text-white">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Link href="/" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="All jobs and new job">
-            ☰ Jobs
+          <Link href="/" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="All projects and new project">
+            ☰ Projects
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-bold">WO {job.header.woNumber || "—"}</p>
+            <p className="truncate font-bold">{job.header.name ? `${job.header.name} · ` : ""}WO {job.header.woNumber || "—"}</p>
             <p className="truncate text-xs text-slate-400">
               {job.header.projectNumber && `Project ${job.header.projectNumber} · `}
               {job.sheets.length} sheets · {job.marks.length} marks

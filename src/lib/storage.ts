@@ -15,6 +15,7 @@ export type StoredJob = Omit<Job, "pdfBytes" | "photos"> & { photos: PhotoMeta[]
 
 export type JobSummary = {
   id: string;
+  name: string;
   woNumber: string;
   projectNumber: string;
   pdfName: string;
@@ -131,6 +132,7 @@ export async function listJobs(): Promise<JobSummary[]> {
   return recs
     .map((r) => ({
       id: r.id,
+      name: r.header.name ?? "",
       woNumber: r.header.woNumber,
       projectNumber: r.header.projectNumber,
       pdfName: r.pdfName,

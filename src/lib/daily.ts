@@ -124,7 +124,7 @@ export async function buildDailyReport(
     `BARDEN LineOS · WO ${wo} daily report · ${date}`,
     [
       ["WO #", wo],
-      ["Project #", job.header.projectNumber || "—"],
+      ["Project", [job.header.name, job.header.projectNumber && `#${job.header.projectNumber}`].filter(Boolean).join(" ") || "—"],
       ["Work date", date],
       ["Crew on job", s.crews.map((x) => x.user).join(", ") || "—"],
       ["Prepared by", opts.preparedBy],

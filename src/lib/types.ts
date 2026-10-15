@@ -99,6 +99,8 @@ export const Sheet = z.object({
 export type Sheet = z.infer<typeof Sheet>;
 
 export const JobHeader = z.object({
+  /** Crew's name for the project, e.g. "Haven Point". */
+  name: z.string().optional(),
   woNumber: z.string(),
   projectNumber: z.string(),
   engineers: z.array(z.string()),

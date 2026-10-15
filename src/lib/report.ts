@@ -149,7 +149,7 @@ export async function buildJobReport(job: Job, result: AllocationResult, opts: R
     `Job Report — WO ${wo}`,
     `BARDEN LineOS · WO ${wo} job report · ${opts.date}`,
     [
-      ["Project #", job.header.projectNumber || "—"],
+      ["Project", [job.header.name, job.header.projectNumber && `#${job.header.projectNumber}`].filter(Boolean).join(" ") || "—"],
       ["Engineers", job.header.engineers.join(", ") || "—"],
       ["Print", `${job.pdfName} (${job.sheets.length} sheets)`],
       ["Report date", opts.date],

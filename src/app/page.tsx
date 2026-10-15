@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useJob } from "@/components/JobProvider";
+import { NewProject } from "@/components/NewProject";
 import { InstallApp } from "@/components/PwaSetup";
-import { demoJob, jobFromPrint } from "@/lib/job";
+import { demoJob } from "@/lib/job";
 import { deleteJob, listJobs, storageAvailable, type JobSummary } from "@/lib/storage";
 
 export default function Home() {
@@ -15,7 +16,6 @@ export default function Home() {
   }, []);
   useEffect(refresh, [refresh, job?.id, restoring]);
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,35 +44,15 @@ export default function Home() {
         </p>
       </header>
 
-      <section className="card flex flex-col gap-3">
-        <h2 className="font-bold">New job / project</h2>
-        <p className="text-sm text-slate-600">
-          Upload the work print PDF for the new WO. It becomes its own job on this phone, with its own master list,
-          marks, task codes and daily input. Text is read on this device.
-        </p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) run("upload", async () => ({ type: "set-job", job: await jobFromPrint(new Uint8Array(await f.arrayBuffer()), f.name) }));
-            e.target.value = "";
-          }}
-        />
-        <button className="btn-primary" disabled={!!busy} onClick={() => fileRef.current?.click()}>
-          {busy === "upload" ? "Reading print…" : "Upload work print PDF"}
-        </button>
-      </section>
+      <NewProject busy={!!busy} onCreate={(newJob) => run("new", async () => ({ type: "set-job", job: newJob }))} />
 
       <section className="card flex flex-col gap-3">
         <h2 className="font-bold">Demo: WO 4222352</h2>
         <p className="text-sm text-slate-600">
-          Sample 6-sheet print with the crew&apos;s markups: S10B 3825, S16A 3600, S63A 5.
+          Sample 5-sheet project built from the crew&apos;s WO 4222352 markups: S10B 3825, S16A 3600.
         </p>
         <button className="btn-ghost" disabled={!!busy} onClick={() => run("demo", async () => ({ type: "set-job", job: await demoJob() }))}>
-          {busy === "demo" ? "Loading demo…" : "Open demo job"}
+          {busy === "demo" ? "Loading demo…" : "Open demo project"}
         </button>
       </section>
 
@@ -81,7 +61,7 @@ export default function Home() {
 
       {saved.length > 0 && (
         <section className="card flex flex-col gap-2">
-          <h2 className="font-bold">Jobs saved on this phone</h2>
+          <h2 className="font-bold">Projects on this phone</h2>
           <ul className="divide-y divide-slate-100">
             {saved.map((j) => (
               <li key={j.id} className="flex items-center gap-3 py-2">
@@ -91,12 +71,12 @@ export default function Home() {
                   onClick={async () => {
                     setBusy(j.id);
                     if (j.id === job?.id || (await openSavedJob(j.id))) router.push("/job");
-                    else setError("That job could not be opened.");
+                    else setError("That project could not be opened.");
                     setBusy(null);
                   }}
                 >
                   <span className="block font-semibold">
-                    WO {j.woNumber || "—"}
+                    {j.name ? `${j.name} · ` : ""}WO {j.woNumber || "—"}
                     {j.projectNumber && j.projectNumber !== j.woNumber && <span className="font-normal text-slate-500"> · Project {j.projectNumber}</span>}{" "}
                     {j.id === job?.id && <span className="chip ml-1 border-emerald-300 bg-emerald-50 text-emerald-800">open</span>}
                   </span>
@@ -109,7 +89,7 @@ export default function Home() {
                   className="btn min-h-9 px-2 text-red-700"
                   aria-label={`Delete WO ${j.woNumber} from this phone`}
                   onClick={async () => {
-                    if (!window.confirm(`Delete WO ${j.woNumber || j.pdfName} from this phone? This cannot be undone.`)) return;
+                    if (!window.confirm(`Delete project ${j.name || `WO ${j.woNumber}` || j.pdfName} from this phone? This cannot be undone.`)) return;
                     await deleteJob(j.id);
                     if (j.id === job?.id) dispatch({ type: "set-job", job: null });
                     refresh();
@@ -125,7 +105,7 @@ export default function Home() {
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       <footer className="mt-auto text-xs text-slate-500">
-        Jobs save on this phone and work with no signal. Crew logins and upload to the office come in Milestone 4.
+        Projects save on this phone and work with no signal. Crew logins and upload to the office come in Milestone 4.
       </footer>
     </main>
   );

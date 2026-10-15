@@ -49,6 +49,7 @@ export function MasterTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <ProjectDetails />
       <section className="card">
         <h2 className="mb-3 font-bold">Master unit list {job.header.woNumber && <span className="text-slate-500">· WO {job.header.woNumber}</span>}</h2>
         <table className="w-full text-sm">
@@ -156,5 +157,41 @@ export function MasterTab() {
         )}
       </section>
     </div>
+  );
+}
+
+function ProjectDetails() {
+  const { job, dispatch } = useJob();
+  if (!job) return null;
+  const h = job.header;
+  const set = (patch: Partial<typeof h>) => dispatch({ type: "header", header: { ...h, ...patch } });
+  return (
+    <details className="card" open={!h.woNumber}>
+      <summary className="cursor-pointer font-bold">
+        Project details <span className="font-normal text-slate-500">· {h.name ? `${h.name} · ` : ""}WO {h.woNumber || "—"}</span>
+      </summary>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <label className="col-span-2 flex flex-col gap-1 text-sm">
+          Project name
+          <input className="input" value={h.name ?? ""} placeholder="e.g. Haven Point" onChange={(e) => set({ name: e.target.value || undefined })} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          WO #
+          <input className="input font-mono" value={h.woNumber} onChange={(e) => set({ woNumber: e.target.value })} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Project #
+          <input className="input font-mono" value={h.projectNumber} onChange={(e) => set({ projectNumber: e.target.value })} />
+        </label>
+        <label className="col-span-2 flex flex-col gap-1 text-sm">
+          Engineers <span className="text-xs text-slate-500">(comma between names)</span>
+          <input
+            className="input"
+            value={h.engineers.join(", ")}
+            onChange={(e) => set({ engineers: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })}
+          />
+        </label>
+      </div>
+    </details>
   );
 }
