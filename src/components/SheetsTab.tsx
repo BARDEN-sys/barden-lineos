@@ -197,6 +197,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
       </div>
 
       <SheetPhotos sheet={sheet} />
+      <SheetTaskCodes sheet={sheet} />
       {selectedMark ? (
         <MarkEditor key={selectedMark.id} mark={selectedMark} sheet={sheet} onClose={() => setSelected(null)} />
       ) : (
@@ -472,5 +473,37 @@ function SheetPhotos({ sheet }: { sheet: Sheet }) {
         </div>
       )}
     </section>
+  );
+}
+
+function SheetTaskCodes({ sheet }: { sheet: Sheet }) {
+  const { job, dispatch } = useJob();
+  if (!job || !job.master.length) return null;
+  const changed = Object.keys(sheet.taskCodes ?? {}).length;
+  return (
+    <details className="card" open={changed > 0}>
+      <summary className="cursor-pointer font-semibold">
+        Task codes on this sheet {changed > 0 && <span className="chip ml-1 border-blue-300 bg-blue-50 text-blue-800">{changed} changed</span>}
+      </summary>
+      <p className="mt-2 text-xs text-slate-500">Leave blank to use the task code from the Master list. Type a code to change it for this sheet only.</p>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {job.master.map((m) => {
+          const own = sheet.taskCodes?.[m.code] ?? "";
+          return (
+            <li key={m.code} className="flex items-center gap-3 py-2">
+              <span className="w-14 font-mono font-semibold">{m.code}</span>
+              <input
+                className={`input min-h-9 w-36 font-mono ${own ? "border-blue-400" : ""}`}
+                aria-label={`${m.code} task code on sheet ${sheet.label}`}
+                placeholder={m.taskCode || "no master code"}
+                value={own}
+                onChange={(e) => dispatch({ type: "sheet-task-code", sheetId: sheet.id, unitCode: m.code, taskCode: e.target.value })}
+              />
+              <span className="text-xs text-slate-500">{own ? "this sheet" : m.taskCode ? "from master" : "missing"}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }

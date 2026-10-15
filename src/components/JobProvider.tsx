@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import { allocate, checkOverride, type AllocationResult, type OverrideCheck } from "@/lib/allocation";
-import { DEMO_USER, type Point, type Photo, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
+import { DEMO_USER, type Point, type Photo, type DailyEntry, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
 // M1 demo mode: the job lives in memory for this browser tab. M4 swaps this store for
 // Supabase (same record shapes, created_by from the signed-in user).
@@ -20,7 +20,11 @@ type Action =
   | { type: "work-box"; sheetId: string; at: Point }
   | { type: "add-photo"; photo: Photo }
   | { type: "update-photo"; id: string; patch: Partial<Pick<Photo, "kind" | "sheetId">> }
-  | { type: "delete-photo"; id: string };
+  | { type: "delete-photo"; id: string }
+  | { type: "sheet-task-code"; sheetId: string; unitCode: string; taskCode: string }
+  | { type: "add-daily"; rows: DailyEntry[] }
+  | { type: "update-daily"; row: DailyEntry }
+  | { type: "delete-daily"; id: string };
 
 function reducer(job: Job | null, a: Action): Job | null {
   if (a.type === "set-job") return a.job;
@@ -61,6 +65,23 @@ function reducer(job: Job | null, a: Action): Job | null {
     case "delete-photo":
       job.photos.find((p) => p.id === a.id && URL.revokeObjectURL(p.url));
       return { ...job, photos: job.photos.filter((p) => p.id !== a.id) };
+    case "sheet-task-code":
+      return {
+        ...job,
+        sheets: job.sheets.map((s) => {
+          if (s.id !== a.sheetId) return s;
+          const taskCodes = { ...(s.taskCodes ?? {}) };
+          if (a.taskCode.trim()) taskCodes[a.unitCode] = a.taskCode.trim();
+          else delete taskCodes[a.unitCode];
+          return { ...s, taskCodes };
+        }),
+      };
+    case "add-daily":
+      return { ...job, daily: [...job.daily, ...a.rows] };
+    case "update-daily":
+      return { ...job, daily: job.daily.map((r) => (r.id === a.row.id ? { ...a.row, updatedBy: DEMO_USER, updatedAt: now } : r)) };
+    case "delete-daily":
+      return { ...job, daily: job.daily.filter((r) => r.id !== a.id) };
     case "clear-override":
       return { ...job, overrides: job.overrides.filter((o) => !(o.sheetId === a.sheetId && o.code === a.code)) };
   }

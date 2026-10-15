@@ -163,14 +163,21 @@ export async function buildJobReport(job: Job, result: AllocationResult, opts: R
 
   // Units vs master
   c.heading("Units vs master");
-  const ux = [M, M + 55, M + 255, M + 320, M + 385, M + 450];
-  c.row(["Code", "Description", "Master", "Placed", "Remaining", "Status"], ux, { bold: true, align: ["l", "l", "r", "r", "r", "l"] });
+  const ux = [M, M + 45, M + 195, M + 270, M + 330, M + 390, M + 455];
+  c.row(["Code", "Description", "Task code", "Master", "Placed", "Remaining", "Status"], ux, { bold: true, align: ["l", "l", "l", "r", "r", "r", "l"] });
   for (const u of result.codes) {
     const color = u.status === "over" ? RED : u.status === "ok" ? GREEN : AMBER;
-    c.row([u.code, u.description, fmt(u.master), fmt(u.total), fmt(u.remaining), u.status.toUpperCase()], ux, {
-      align: ["l", "l", "r", "r", "r", "l"],
-      colors: [undefined, undefined, undefined, undefined, u.remaining < 0 ? RED : undefined, color],
+    const task = job.master.find((m) => m.code === u.code)?.taskCode ?? "—";
+    c.row([u.code, u.description, task, fmt(u.master), fmt(u.total), fmt(u.remaining), u.status.toUpperCase()], ux, {
+      align: ["l", "l", "l", "r", "r", "r", "l"],
+      colors: [undefined, undefined, BLUE, undefined, undefined, u.remaining < 0 ? RED : undefined, color],
     });
+  }
+  const sheetOverrides = job.sheets.flatMap((s) => Object.entries(s.taskCodes ?? {}).map(([code, t]) => `Sheet ${s.label}: ${code} → ${t}`));
+  if (sheetOverrides.length) c.text(`Task codes changed by sheet — ${sheetOverrides.join(" · ")}`, { size: 8, color: MUTED });
+  if (job.daily.length) {
+    const billed = job.master.map((m) => `${m.code} ${fmt(job.daily.filter((e) => e.unitCode === m.code).reduce((a, e) => a + e.qty, 0))}`);
+    c.text(`Billed in daily input to date: ${billed.join(" · ")}`, { size: 8, color: MUTED });
   }
 
   if (result.flags.length) {

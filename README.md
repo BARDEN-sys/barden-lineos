@@ -32,6 +32,11 @@ npm run build
     changes (who / when), photos. The logo is `public/barden-logo.png`.
   - **Daily report PDF:** pick a work day; units marked that day vs job to date and master,
     each crew member's marks with times, changes / overrides that day, and that day's photos.
+  - **Billing task codes:** each unit code has a task code on the Master list; a sheet can
+    change it ("Task codes on this sheet"). The **Daily** tab is the billing input: pick a
+    day, add rows (sheet, unit code, task code auto-filled, qty, note) or fill them from the
+    day's marks. Rows that would put a code over master are blocked. Billing CSV per day or
+    all days; the daily report lists the rows and totals by task code.
   - **WORK PERFORMED box:** blue table like the crew's finished sheets; tap "Box" and then an
     empty spot on the map to place it. Code callouts are yellow tags with arrows.
 - M2: photo of marked-up paper → detect highlights.

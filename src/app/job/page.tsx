@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AllocationTab } from "@/components/AllocationTab";
+import { DailyTab } from "@/components/DailyTab";
 import { ExportTab } from "@/components/ExportTab";
 import { GlossaryTab } from "@/components/GlossaryTab";
 import { useJob } from "@/components/JobProvider";
@@ -14,6 +15,7 @@ const TABS = [
   { id: "master", label: "Master" },
   { id: "glossary", label: "Codes" },
   { id: "allocation", label: "Allocation" },
+  { id: "daily", label: "Daily" },
   { id: "export", label: "Export" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -63,12 +65,13 @@ export default function JobPage() {
         {tab === "master" && <MasterTab />}
         {tab === "glossary" && <GlossaryTab />}
         {tab === "allocation" && <AllocationTab />}
+        {tab === "daily" && <DailyTab />}
         {tab === "export" && <ExportTab />}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-6 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:hidden">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`min-h-14 text-xs font-semibold ${tab === t.id ? "text-slate-900" : "text-slate-400"}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`min-h-14 text-[11px] font-semibold ${tab === t.id ? "text-slate-900" : "text-slate-400"}`}>
             {t.label}
           </button>
         ))}

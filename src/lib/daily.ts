@@ -1,25 +1,16 @@
 import type { AllocationResult } from "./allocation";
 import { AMBER, BLUE, Cursor, drawPhotos, fmt, GREEN, M, MUTED, RED, sheetLabel, startReport } from "./report";
+import { byTaskCode } from "./billing";
+import { dayKey, dayLabel } from "./dates";
 import type { Job, Mark, Override, Photo } from "./types";
+
+export { dayKey, dayLabel };
 
 // Daily report: what was done on one day, by crew member, against job-to-date and master.
 // Work is counted on the day a mark was created; later edits show under "Changes".
 
-/** Local calendar day (YYYY-MM-DD) of an ISO timestamp. */
-export function dayKey(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-export const dayLabel = (day: string) => {
-  const [y, m, d] = day.split("-").map(Number);
-  return `${m}/${d}/${y}`;
-};
-
 /** Days with any crew activity, newest first. */
-export function activityDays(job: Pick<Job, "marks" | "overrides" | "photos">): string[] {
+export function activityDays(job: Pick<Job, "marks" | "overrides" | "photos"> & Partial<Pick<Job, "daily">>): string[] {
   const days = new Set<string>();
   for (const m of job.marks) {
     days.add(dayKey(m.createdAt));
@@ -27,6 +18,7 @@ export function activityDays(job: Pick<Job, "marks" | "overrides" | "photos">): 
   }
   for (const o of job.overrides) days.add(dayKey(o.createdAt));
   for (const p of job.photos) days.add(dayKey(p.takenAt));
+  for (const e of job.daily ?? []) days.add(e.day);
   days.delete("");
   return [...days].sort().reverse();
 }
@@ -140,7 +132,7 @@ export async function buildDailyReport(
     opts.logo,
   );
 
-  const anything = s.crews.length || s.edits.length || s.overrides.length;
+  const anything = s.crews.length || s.edits.length || s.overrides.length || job.daily.some((e) => e.day === opts.day);
   if (!anything) c.text("No work recorded on this day.", { bold: true, color: MUTED });
 
   // Units: today vs job-to-date vs master
@@ -179,6 +171,26 @@ export async function buildDailyReport(
     for (const m of shown) c.row([time(m.createdAt), label(m.sheetId), markCodes(m), m.note ?? ""], mx);
     const hidden = crew.marks.length - shown.length;
     if (hidden) c.text(`Plus ${hidden} removal spot(s) without unit codes.`, { size: 8, color: MUTED });
+  }
+
+  // Billing: the day's input rows with task codes, then totals by task code.
+  const billing = job.daily.filter((e) => e.day === opts.day);
+  if (billing.length) {
+    c.heading("Billing (daily input)");
+    const bx = [M, M + 85, M + 145, M + 195, M + 255, M + 445];
+    c.row(["Task code", "Unit", "Sheet", "Qty", "Note", "By"], bx, { bold: true, align: ["l", "l", "l", "r", "l", "l"] });
+    for (const e of billing) {
+      c.row([e.taskCode || "(none)", e.unitCode, label(e.sheetId), fmt(e.qty), e.note ?? "", e.updatedBy ?? e.createdBy], bx, {
+        align: ["l", "l", "l", "r", "l", "l"],
+        colors: [e.taskCode ? BLUE : AMBER],
+      });
+    }
+    c.y -= 6;
+    c.text("Totals by task code", { bold: true, size: 10 });
+    const tx = [M, M + 120, M + 200];
+    for (const t of byTaskCode(billing)) c.row([t.taskCode || "(none)", t.unitCode, fmt(t.qty)], tx, { align: ["l", "l", "r"], colors: [t.taskCode ? BLUE : AMBER] });
+    const missing = billing.filter((e) => !e.taskCode.trim()).length;
+    if (missing) c.text(`${missing} row(s) have no task code.`, { bold: true, color: AMBER });
   }
 
   if (s.edits.length || s.overrides.length) {

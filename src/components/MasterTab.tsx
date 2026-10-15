@@ -56,6 +56,7 @@ export function MasterTab() {
             <tr className="text-left text-xs text-slate-500">
               <th className="pb-2">Code</th>
               <th className="pb-2">Description</th>
+              <th className="pb-2">Task code</th>
               <th className="pb-2 text-right">Est qty</th>
               <th />
             </tr>
@@ -65,6 +66,15 @@ export function MasterTab() {
               <tr key={m.code}>
                 <td className="py-2 font-mono font-semibold">{m.code}</td>
                 <td className="py-2">{m.description}</td>
+                <td className="py-2 pr-2">
+                  <input
+                    className={`input min-h-9 w-28 font-mono ${m.taskCode ? "" : "border-amber-400"}`}
+                    placeholder="Task code"
+                    aria-label={`${m.code} task code`}
+                    value={m.taskCode ?? ""}
+                    onChange={(e) => setMaster(job.master.map((x, k) => (k === i ? { ...x, taskCode: e.target.value || undefined } : x)))}
+                  />
+                </td>
                 <td className="py-2 text-right">
                   <input
                     className="input ml-auto w-24 text-right"
@@ -83,7 +93,7 @@ export function MasterTab() {
               </tr>
             ))}
             {!job.master.length && (
-              <tr><td colSpan={4} className="py-3 text-slate-500">No master codes yet.</td></tr>
+              <tr><td colSpan={5} className="py-3 text-slate-500">No master codes yet.</td></tr>
             )}
           </tbody>
         </table>

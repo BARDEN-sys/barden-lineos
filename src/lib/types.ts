@@ -24,6 +24,8 @@ export const MasterItem = z.object({
   code: UnitCode,
   description: z.string().trim(),
   estQty: z.number().int().nonnegative(),
+  /** Billing task code for this unit code; a sheet can override it. */
+  taskCode: z.string().trim().optional(),
 });
 export type MasterItem = z.infer<typeof MasterItem>;
 
@@ -91,6 +93,8 @@ export const Sheet = z.object({
   unitsBlock: PdfRect.optional(),
   /** Top-left of the WORK PERFORMED box (normalised); crew taps an empty spot on the map. */
   workBoxAt: Point.optional(),
+  /** Per-sheet billing task code overrides, by unit code. Blank = master task code. */
+  taskCodes: z.record(z.string(), z.string()).optional(),
 });
 export type Sheet = z.infer<typeof Sheet>;
 
@@ -118,6 +122,24 @@ export type Photo = {
   createdBy: string;
 };
 
+/** One billing row of daily input: what was done that day, under which task code. */
+export const DailyEntry = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  /** Local work day, YYYY-MM-DD. */
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  sheetId: z.string().nullable(),
+  unitCode: UnitCode,
+  taskCode: z.string().trim(),
+  qty: z.number().int().nonnegative(),
+  note: z.string().optional(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedBy: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+export type DailyEntry = z.infer<typeof DailyEntry>;
+
 export type Job = {
   id: string;
   header: JobHeader;
@@ -129,6 +151,7 @@ export type Job = {
   marks: Mark[];
   overrides: Override[];
   photos: Photo[];
+  daily: DailyEntry[];
   createdBy: string;
   createdAt: string;
 };

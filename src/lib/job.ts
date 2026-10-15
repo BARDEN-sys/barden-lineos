@@ -35,6 +35,7 @@ export async function jobFromPrint(bytes: Uint8Array, pdfName: string, user = DE
     marks: [],
     overrides: [],
     photos: [],
+    daily: [],
     createdBy: user,
     createdAt: new Date().toISOString(),
   };
