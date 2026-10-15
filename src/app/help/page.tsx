@@ -5,6 +5,17 @@ import { useEffect, useState } from "react";
 import { VoiceButton } from "@/components/VoiceButton";
 import { findHelp, HELP, speechFor, type HelpTopic } from "@/lib/help";
 
+const VOICE_KEY = "lineos-voice";
+
+/** English voices, clearest first: downloaded Enhanced/Premium voices, then US, then the rest. */
+function englishVoices(all: SpeechSynthesisVoice[]): SpeechSynthesisVoice[] {
+  const rank = (v: SpeechSynthesisVoice) =>
+    (/premium/i.test(v.name) ? 0 : /enhanced|neural|natural/i.test(v.name) ? 1 : 2) * 10 + (v.lang === "en-US" ? 0 : 1);
+  // Novelty voices (Bells, Bubbles, Whisper, …) are hard to understand.
+  const silly = /bells|bubbles|bad news|boing|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|bahh|deranged|hysterical|pipe organ/i;
+  return all.filter((v) => v.lang.toLowerCase().startsWith("en") && !silly.test(v.name)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
 /** Help desk: ask by voice or typing, and have the steps read out loud. */
 export default function HelpPage() {
   const [question, setQuestion] = useState("");
@@ -13,23 +24,60 @@ export default function HelpPage() {
   const [speaking, setSpeaking] = useState<string | null>(null);
   const [canSpeak, setCanSpeak] = useState(true);
 
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, setVoiceName] = useState("");
+  const [rate, setRate] = useState(0.9);
+
   useEffect(() => {
-    setCanSpeak(typeof window !== "undefined" && "speechSynthesis" in window);
-    return () => window.speechSynthesis?.cancel();
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    setCanSpeak(!!synth);
+    if (!synth) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(VOICE_KEY) ?? "{}");
+      if (saved.voice) setVoiceName(saved.voice);
+      if (saved.rate) setRate(saved.rate);
+    } catch {}
+    // iPhone/iPad load the voice list a moment after the page opens.
+    const load = () => setVoices(englishVoices(synth.getVoices()));
+    load();
+    synth.addEventListener?.("voiceschanged", load);
+    return () => {
+      synth.removeEventListener?.("voiceschanged", load);
+      synth.cancel();
+    };
   }, []);
+
+  function saveVoice(next: { voice?: string; rate?: number }) {
+    const v = next.voice ?? voiceName;
+    const r = next.rate ?? rate;
+    setVoiceName(v);
+    setRate(r);
+    try {
+      localStorage.setItem(VOICE_KEY, JSON.stringify({ voice: v, rate: r }));
+    } catch {}
+  }
+
+  function say(text: string, id: string) {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const voice = voices.find((v) => v.name === voiceName) ?? voices[0];
+    if (voice) u.voice = voice;
+    u.lang = voice?.lang ?? "en-US";
+    u.rate = rate;
+    u.onend = () => setSpeaking((s) => (s === id ? null : s));
+    u.onerror = () => setSpeaking(null);
+    setSpeaking(id);
+    synth.speak(u);
+  }
 
   function read(t: HelpTopic) {
     const synth = window.speechSynthesis;
     if (!synth) return;
     synth.cancel();
     if (speaking === t.id) return setSpeaking(null);
-    const u = new SpeechSynthesisUtterance(speechFor(t));
-    u.lang = "en-US";
-    u.rate = 0.95;
-    u.onend = () => setSpeaking((s) => (s === t.id ? null : s));
-    u.onerror = () => setSpeaking(null);
-    setSpeaking(t.id);
-    synth.speak(u);
+    say(speechFor(t), t.id);
   }
 
   function ask(q: string) {
@@ -71,6 +119,39 @@ export default function HelpPage() {
         )}
         {!canSpeak && <p className="text-xs text-slate-500">This browser can&apos;t read out loud; the steps are below.</p>}
       </section>
+
+      {canSpeak && (
+        <details className="card">
+          <summary className="cursor-pointer font-semibold">🔊 Reading voice</summary>
+          <div className="mt-3 flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-sm">
+              Voice
+              <select className="input" value={voiceName || voices[0]?.name || ""} onChange={(e) => saveVoice({ voice: e.target.value })}>
+                {voices.map((v) => (
+                  <option key={v.name + v.lang} value={v.name}>
+                    {v.name} ({v.lang}){/enhanced|premium|neural|natural/i.test(v.name) ? " ★" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              Speed: {rate === 1 ? "normal" : rate < 1 ? "slower" : "faster"}
+              <input type="range" min={0.6} max={1.3} step={0.05} value={rate} onChange={(e) => saveVoice({ rate: Number(e.target.value) })} />
+            </label>
+            <button
+              className="btn-primary self-start"
+              onClick={() => say("This is how the help will sound. Tap New project, then choose the work print.", "test")}
+            >
+              ▶ Test this voice
+            </button>
+            <p className="text-xs text-slate-500">
+              ★ = clearer, more natural voice. For the clearest voices on iPhone or iPad: Settings → Accessibility →
+              Spoken Content → Voices → English → pick a voice marked <b>Enhanced</b> or <b>Premium</b> (like Ava or
+              Evan) and download it. Then close and reopen LineOS and pick it here.
+            </p>
+          </div>
+        </details>
+      )}
 
       {answers.length > 0 && (
         <section className="flex flex-col gap-2">
