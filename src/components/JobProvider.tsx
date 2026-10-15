@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
 import { allocate, checkOverride, type AllocationResult, type OverrideCheck } from "@/lib/allocation";
-import { DEMO_USER, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
+import { DEMO_USER, type Point, type Photo, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
 // M1 demo mode: the job lives in memory for this browser tab. M4 swaps this store for
 // Supabase (same record shapes, created_by from the signed-in user).
@@ -16,7 +16,11 @@ type Action =
   | { type: "update-mark"; mark: Mark }
   | { type: "delete-mark"; id: string }
   | { type: "set-override"; sheetId: string; code: string; qty: number }
-  | { type: "clear-override"; sheetId: string; code: string };
+  | { type: "clear-override"; sheetId: string; code: string }
+  | { type: "work-box"; sheetId: string; at: Point }
+  | { type: "add-photo"; photo: Photo }
+  | { type: "update-photo"; id: string; patch: Partial<Pick<Photo, "kind" | "sheetId">> }
+  | { type: "delete-photo"; id: string };
 
 function reducer(job: Job | null, a: Action): Job | null {
   if (a.type === "set-job") return a.job;
@@ -48,6 +52,15 @@ function reducer(job: Job | null, a: Action): Job | null {
         ],
       };
     }
+    case "work-box":
+      return { ...job, sheets: job.sheets.map((s) => (s.id === a.sheetId ? { ...s, workBoxAt: a.at } : s)) };
+    case "add-photo":
+      return { ...job, photos: [...job.photos, a.photo] };
+    case "update-photo":
+      return { ...job, photos: job.photos.map((p) => (p.id === a.id ? { ...p, ...a.patch } : p)) };
+    case "delete-photo":
+      job.photos.find((p) => p.id === a.id && URL.revokeObjectURL(p.url));
+      return { ...job, photos: job.photos.filter((p) => p.id !== a.id) };
     case "clear-override":
       return { ...job, overrides: job.overrides.filter((o) => !(o.sheetId === a.sheetId && o.code === a.code)) };
   }

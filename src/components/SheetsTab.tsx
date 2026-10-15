@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { workPerformed } from "@/lib/allocation";
+import { downscalePhoto } from "@/lib/image";
 import { newId } from "@/lib/job";
-import { DEMO_USER, type Mark, type MarkItem, type Point, type Sheet } from "@/lib/types";
+import { parseSpokenCodes } from "@/lib/voice";
+import { DEFAULT_WORK_BOX } from "@/lib/output";
+import { DEMO_USER, type Mark, type MarkItem, type Photo, type Point, type Sheet } from "@/lib/types";
+import { CameraButtons } from "./CameraButtons";
+import { VoiceButton } from "./VoiceButton";
 import { useJob } from "./JobProvider";
 import { PdfPageCanvas } from "./PdfPageCanvas";
 
-type Tool = "view" | "run" | "spot";
+type Tool = "view" | "run" | "spot" | "box";
 
 const RUN_STROKE = "rgba(250, 204, 21, 0.7)"; // yellow highlighter
 const SPOT_FILL = "rgba(236, 72, 153, 0.75)"; // pink removal spot
@@ -41,7 +47,7 @@ export function SheetsTab() {
 }
 
 function SheetView({ sheet }: { sheet: Sheet }) {
-  const { job, dispatch } = useJob();
+  const { job, result, dispatch } = useJob();
   const [tool, setTool] = useState<Tool>("view");
   const [draft, setDraft] = useState<Point[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -86,7 +92,10 @@ function SheetView({ sheet }: { sheet: Sheet }) {
       Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
       Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
     ];
-    if (tool === "spot") {
+    if (tool === "box") {
+      dispatch({ type: "work-box", sheetId: sheet.id, at: pt });
+      setTool("view");
+    } else if (tool === "spot") {
       addMark("spot", [pt]);
       setTool("view");
     } else setDraft((d) => [...d, pt]);
@@ -110,6 +119,9 @@ function SheetView({ sheet }: { sheet: Sheet }) {
         <ToolButton active={tool === "spot"} onClick={() => { setTool("spot"); setDraft([]); setSelected(null); }}>
           <span className="inline-block h-3 w-3 rounded-full" style={{ background: SPOT_FILL }} /> Spot
         </ToolButton>
+        <ToolButton active={tool === "box"} onClick={() => { setTool("box"); setDraft([]); setSelected(null); }}>
+          <span className="inline-block h-3 w-4 rounded-sm bg-blue-600" /> Box
+        </ToolButton>
         <div className="ml-auto flex items-center gap-1">
           {[1, 1.5, 2, 3].map((z) => (
             <button key={z} onClick={() => setZoom(z)} className={`btn min-h-9 px-2 ${zoom === z ? "bg-slate-200" : ""}`}>
@@ -125,6 +137,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
           </div>
         )}
         {tool === "spot" && <p className="w-full text-sm text-slate-600">Tap the cut / splice / removal location.</p>}
+        {tool === "box" && <p className="w-full text-sm text-slate-600">Tap an empty spot for the top-left corner of the WORK PERFORMED box.</p>}
       </div>
 
       <div ref={wrapRef} className="w-full">
@@ -163,6 +176,18 @@ function SheetView({ sheet }: { sheet: Sheet }) {
                   />
                 ),
               )}
+              {(() => {
+                const at = sheet.workBoxAt ?? DEFAULT_WORK_BOX;
+                const rows = result ? workPerformed(result, sheet.id).length : 0;
+                const bw = (200 / sheet.widthPt) * width;
+                const bh = ((22 + (Math.max(1, rows) + 1) * 17) / sheet.heightPt) * height;
+                return (
+                  <g pointerEvents="none">
+                    <rect x={at[0] * width} y={at[1] * height} width={bw} height={bh} fill="rgba(37,99,235,0.08)" stroke="#2563eb" strokeDasharray="5 4" strokeWidth={1.5} />
+                    <text x={at[0] * width + 4} y={at[1] * height + 12} fontSize={10} fill="#2563eb" fontWeight={700}>WORK PERFORMED</text>
+                  </g>
+                );
+              })()}
               {draft.length > 0 && (
                 <polyline points={draft.map(toPx).join(" ")} fill="none" stroke={RUN_STROKE} strokeWidth={10} strokeDasharray="6 6" />
               )}
@@ -171,6 +196,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
         </div>
       </div>
 
+      <SheetPhotos sheet={sheet} />
       {selectedMark ? (
         <MarkEditor key={selectedMark.id} mark={selectedMark} sheet={sheet} onClose={() => setSelected(null)} />
       ) : (
@@ -261,6 +287,20 @@ function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClos
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">Codes at this {m.kind}</span>
+        <VoiceButton
+          label='Speak codes ("S10B 50, P22K1 1")'
+          onText={(text) => {
+            const spoken = parseSpokenCodes(text, codeOptions);
+            if (!spoken.length) return save({ ...m, note: [m.note, text].filter(Boolean).join(" · ") });
+            const items = [...m.items];
+            for (const it of spoken) {
+              const k = items.findIndex((x) => x.code === it.code);
+              if (k >= 0) items[k] = it;
+              else items.push(it);
+            }
+            save({ ...m, items });
+          }}
+        />
         {m.items.map((it, i) => {
           const g = job.glossary.find((x) => x.code === it.code);
           return (
@@ -298,6 +338,7 @@ function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClos
         Note
         <input className="input" value={m.note ?? ""} onChange={(e) => save({ ...m, note: e.target.value || undefined })} />
       </label>
+      <VoiceButton label="Dictate note" onText={(text) => save({ ...m, note: [m.note, text].filter(Boolean).join(" ") })} />
 
       <button className="btn-danger self-start" onClick={() => { dispatch({ type: "delete-mark", id: m.id }); onClose(); }}>
         Delete mark
@@ -339,5 +380,97 @@ function SheetInfo({ sheet }: { sheet: Sheet }) {
         <dd>{sheet.notes.length ? sheet.notes.map((n) => <p key={n}>{n}</p>) : "—"}</dd>
       </dl>
     </details>
+  );
+}
+
+function SheetPhotos({ sheet }: { sheet: Sheet }) {
+  const { job, dispatch } = useJob();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<Photo | null>(null);
+  if (!job) return null;
+  const photos = job.photos.filter((p) => p.sheetId === sheet.id);
+
+  async function add(files: File[]) {
+    setBusy(true);
+    setError(null);
+    try {
+      for (const f of files) {
+        const { blob, width, height } = await downscalePhoto(f);
+        dispatch({
+          type: "add-photo",
+          photo: {
+            id: newId("photo"),
+            jobId: job!.id,
+            sheetId: sheet.id,
+            kind: "markup",
+            blob,
+            url: URL.createObjectURL(blob),
+            width,
+            height,
+            takenAt: new Date().toISOString(),
+            createdBy: DEMO_USER,
+          },
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card flex flex-col gap-3">
+      <div>
+        <h3 className="font-semibold">Photos · sheet {sheet.label}</h3>
+        <p className="text-xs text-slate-500">
+          Snap the marked-up paper sheet (or the work). Open it here while you mark the PDF. Milestone 2 reads the
+          highlights from these photos automatically.
+        </p>
+      </div>
+      <CameraButtons multiple onFiles={add} disabled={busy} />
+      {busy && <p className="text-sm text-slate-600">Saving photo…</p>}
+      {error && <p className="text-sm text-red-700">{error}</p>}
+      {photos.length > 0 && (
+        <ul className="flex gap-2 overflow-x-auto pb-1">
+          {photos.map((p) => (
+            <li key={p.id} className="shrink-0">
+              <button onClick={() => setOpen(p)} className="block overflow-hidden rounded-lg border border-slate-300">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p.url} alt={`Sheet ${sheet.label} photo`} className="h-24 w-32 object-cover" />
+              </button>
+              <span className="block text-[11px] text-slate-500">
+                {p.kind === "markup" ? "Marked-up print" : "Field"} · {new Date(p.takenAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/90" role="dialog" aria-label="Photo">
+          <div className="flex items-center gap-2 p-3 text-white">
+            <select
+              className="input w-44 text-slate-900"
+              value={open.kind}
+              onChange={(e) => {
+                const kind = e.target.value as Photo["kind"];
+                dispatch({ type: "update-photo", id: open.id, patch: { kind } });
+                setOpen({ ...open, kind });
+              }}
+            >
+              <option value="markup">Marked-up print</option>
+              <option value="field">Field photo</option>
+            </select>
+            <button className="btn-danger ml-auto" onClick={() => { dispatch({ type: "delete-photo", id: open.id }); setOpen(null); }}>Delete</button>
+            <button className="btn-ghost" onClick={() => setOpen(null)}>Close</button>
+          </div>
+          <div className="flex-1 overflow-auto" style={{ touchAction: "pinch-zoom pan-x pan-y" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={open.url} alt="" className="mx-auto max-w-none" style={{ width: "min(200%, 2400px)" }} />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

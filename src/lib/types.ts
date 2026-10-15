@@ -89,6 +89,8 @@ export const Sheet = z.object({
   notes: z.array(z.string()),
   codesFound: z.array(z.string()),
   unitsBlock: PdfRect.optional(),
+  /** Top-left of the WORK PERFORMED box (normalised); crew taps an empty spot on the map. */
+  workBoxAt: Point.optional(),
 });
 export type Sheet = z.infer<typeof Sheet>;
 
@@ -98,6 +100,23 @@ export const JobHeader = z.object({
   engineers: z.array(z.string()),
 });
 export type JobHeader = z.infer<typeof JobHeader>;
+
+/** A photo taken on the job: the marked-up paper sheet, or the work in the field. */
+export type PhotoKind = "markup" | "field";
+export type Photo = {
+  id: string;
+  jobId: string;
+  /** null = job-level photo not tied to a sheet. */
+  sheetId: string | null;
+  kind: PhotoKind;
+  /** Downscaled JPEG; M4 uploads this to Supabase storage. */
+  blob: Blob;
+  url: string;
+  width: number;
+  height: number;
+  takenAt: string;
+  createdBy: string;
+};
 
 export type Job = {
   id: string;
@@ -109,6 +128,7 @@ export type Job = {
   glossary: GlossaryEntry[];
   marks: Mark[];
   overrides: Override[];
+  photos: Photo[];
   createdBy: string;
   createdAt: string;
 };

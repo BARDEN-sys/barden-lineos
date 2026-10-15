@@ -20,14 +20,33 @@ npm run build
 
 ## Status
 
-- **M1 (done):** PDF upload + text extraction (pdf.js), master list (manual, paste, screenshot
-  OCR), code glossary, manual run/spot marking, allocation engine, clean output PDFs + CSV.
-  Demo mode, in memory (a job lives in the browser tab).
+- **M1 (done):** PDF upload + text extraction (pdf.js), master list (manual, paste, photo /
+  screenshot OCR, voice), code glossary, manual run/spot marking, allocation engine, clean
+  output PDFs + CSV, job report PDF. Demo mode, in memory (a job lives in the browser tab).
+  - **Camera:** "Take photo" opens the phone's rear camera. Photos of the marked-up paper (or
+    the work) attach to each sheet, open full-screen while marking, and go into the job report.
+    M2 will read the highlights from these photos.
+  - **Voice:** on a mark, say "S10B 50, P22K1 1" to fill codes, or dictate a note (browser
+    speech recognition; falls back to the phone keyboard's mic key).
+  - **Job report PDF:** BARDEN logo, units vs master, flags, work by sheet, crew marks and
+    changes (who / when), photos. Put the logo at `public/barden-logo.png` (PNG or JPEG);
+    without it the report shows a BARDEN wordmark.
+  - **WORK PERFORMED box:** blue table like the crew's finished sheets; tap "Box" and then an
+    empty spot on the map to place it. Code callouts are yellow tags with arrows.
 - M2: photo of marked-up paper → detect highlights.
 - M3: map / GPS measuring (`GOOGLE_MAPS_API_KEY`).
 - M4: Supabase project, crew logins and invites — see [docs/addendum-crew-invites.md](docs/addendum-crew-invites.md).
 
 See [docs/SPEC.md](docs/SPEC.md) for the full build package.
+
+## Demo job (WO 4222352)
+
+Laid out after the crew's marked-up paper prints (photos 10/8/2026): Tarpon Dr splices 1–2
+(S10B 50, 50), Dolphin Dr splices 3–4 (S10B 100, 25), Haven Point Dr splice 5 (S10B 3600,
+S16A 1800) and the South Beach Golf S16A 1800. S10A 1800 and P22K1 were written on the paper
+but are not in the master, so they are flagged and get 0. S63A (master 5) was not written on
+any photographed sheet, so it stays unmarked. The print itself is generated (placeholder
+names), so no customer document is in the repo.
 
 ## How allocation works (`src/lib/allocation.ts`)
 

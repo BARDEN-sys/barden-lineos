@@ -39,10 +39,12 @@ const TAG = /\bPP[RX](?:[\s#-]*\d+)?\b/g;
 const CODE = /\b([A-Z]\d{2}[A-Z]\d?)\b/g;
 const NOTE = /\b(SPLICER|LINE CREW|CREW NOTE|NOTE)\b/;
 const WO = /\bW\.?O\.?\s*(?:#|NO\.?)?\s*:?\s*(\d{6,9})\b/;
-const PROJECT = /\bPROJ(?:ECT)?\.?\s*(?:#|NO\.?)?\s*:?\s*([A-Z0-9][A-Z0-9-]{2,})\b/;
+// "PROJECT#4222058", "PROJECT # CR-26-0187", "PROJECT NUMBER: 4222058"
+const PROJECT = /\bPROJ(?:ECT)?\.?\s*(?:#|NO\.?|NUMBER)?\s*:?\s*([A-Z0-9][A-Z0-9-]{2,})\b/;
 // Needs the colon so notes like "SEE ENGINEER" are not read as the engineer field.
-const ENGINEER = /\bENGINEERS?\s*:\s*(.+)$/;
-const SHEET = /\bSHEET\s*(\d+)(?:\s*OF\s*(\d+))?\b/;
+// Real prints use "KCI ENG: …" / "FTR ENG: …"; the name ends at "PH#" / "PHONE".
+const ENGINEER = /\b(?:(?:[A-Z]{2,4}\s)?ENG(?:INEER)?S?)\s*:\s*(.+?)(?:\s+(?:PH(?:ONE)?\s*#?:?).*)?$/;
+const SHEET = /\b(?:SHEET|SHT)\s*:?\s*(\d+)(?:\s*OF\s*(\d+))?\b/;
 const UNITS = /\bUNITS\b|\bACCT\.?\s*CODES?\b/;
 
 export function parsePage(items: TextItem[], pageWidth: number): ParsedPage {

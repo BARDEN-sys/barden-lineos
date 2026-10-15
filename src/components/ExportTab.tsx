@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { renderSheets, summaryCsv } from "@/lib/output";
+import { buildJobReport } from "@/lib/report";
+import { DEMO_USER } from "@/lib/types";
 import { Flags } from "./AllocationTab";
 import { useJob } from "./JobProvider";
 
@@ -23,6 +25,7 @@ const today = () => {
 export function ExportTab() {
   const { job, result } = useJob();
   const [date, setDate] = useState(today);
+  const [preparedBy, setPreparedBy] = useState(DEMO_USER);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   if (!job || !result) return null;
@@ -33,6 +36,23 @@ export function ExportTab() {
     setError(null);
     try {
       download(await renderSheets(job!, result!, sheetIds, { date }), name, "application/pdf");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function report() {
+    setBusy("report");
+    setError(null);
+    try {
+      // Logo is optional: drop the BARDEN logo at public/barden-logo.png.
+      const logo = await fetch("/barden-logo.png")
+        .then((r) => (r.ok && r.headers.get("content-type")?.startsWith("image/") ? r.arrayBuffer() : null))
+        .catch(() => null);
+      const opts = { date, preparedBy, logo: logo ? new Uint8Array(logo) : undefined };
+      download(await buildJobReport(job!, result!, opts), `WO-${wo}-job-report.pdf`, "application/pdf");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -65,6 +85,20 @@ export function ExportTab() {
         </div>
         {!job.master.length && <p className="text-sm text-amber-800">Add the master unit list before exporting.</p>}
         {error && <p className="text-sm text-red-700">{error}</p>}
+      </section>
+      <section className="card flex flex-col gap-3">
+        <h2 className="font-bold">Job report</h2>
+        <p className="text-sm text-slate-600">
+          One PDF to send with the sheets: units vs master, flags, work by sheet, crew marks and changes (who and when),
+          and the job photos. Works even when export is blocked, so you can show what is over.
+        </p>
+        <label className="flex flex-col gap-1 text-sm">
+          Prepared by
+          <input className="input w-64" value={preparedBy} onChange={(e) => setPreparedBy(e.target.value)} />
+        </label>
+        <button className="btn-primary self-start" disabled={!!busy} onClick={report}>
+          {busy === "report" ? "Building…" : "Job report PDF"}
+        </button>
       </section>
       <section className="card">
         <h3 className="mb-2 font-semibold">Per-sheet PDFs</h3>

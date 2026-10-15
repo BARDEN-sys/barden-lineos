@@ -3,10 +3,21 @@ import type { Mark, MarkItem, Point } from "./types";
 import { DEMO_USER } from "./types";
 
 /**
- * Sample WO 4222352. The print is generated (not a real Frontier print) so the repo
- * ships no customer documents; its text layer carries the same kinds of fields a real
- * print has. The marks reproduce the crew's paper markups:
- *   S10B 50 + 50 + 100 + 25 + 3600 = 3825   S16A 1800 + 1800 = 3600   S63A 1 x 5 = 5
+ * Sample WO 4222352, laid out after the crew's marked-up paper prints (photos 10/8/2026).
+ * The print itself is generated so the repo ships no customer documents; names and most
+ * detail are placeholders. What matters is copied from the photos:
+ *
+ *   Sheet 2 (Tarpon Dr):      splice 1  P22K1, S10B 50     splice 2  P22K1, S10B 50
+ *                             3rd St E / 4th St E aerial copper, terminals removed (pink)
+ *   Sheet 3 (Dolphin Dr):     splice 3  P22K1, S10B 100    splice 4  P22K1, S10B 25
+ *                             Dolphin Dr cable highlighted yellow (retire in place)
+ *   Sheet 5 (Haven Point Dr): splice 5  S16A 1800, S10A 1800, S10B 3600
+ *                             "South Beach Golf" S16A 1800
+ *
+ *   S10B 50 + 50 + 100 + 25 + 3600 = 3825   S16A 1800 + 1800 = 3600   (= master)
+ *   S10A and P22K1 are on the markups but not in the master -> flagged, get 0.
+ *   S63A (master 5) is not written on any photographed sheet -> left unmarked.
+ *   Sheets 1 and 4 were not photographed.
  */
 
 export const DEMO_WO = "4222352";
@@ -14,88 +25,141 @@ export const PAGE_W = 1224; // 17 x 11 in, landscape
 export const PAGE_H = 792;
 
 type DemoSpot = { at: Point; items: MarkItem[]; note: string };
+type DemoRun = { path: Point[]; footage: number; label: string };
 type DemoPage = {
+  title: string;
   streets: { name: string; from: Point; to: Point }[];
-  cable?: { label: string; path: Point[]; footage: number };
+  cables: { label: string; footage: number; at: Point }[];
   poles: { tag: string; at: Point }[];
-  note?: string;
+  splices: { n: number; at: Point }[];
+  notes: string[];
+  runs: DemoRun[];
   spots: DemoSpot[];
+  /** Pink removal marks (terminals/drops) with no unit code written next to them. */
+  removals: Point[];
 };
 
 export const DEMO_PAGES: DemoPage[] = [
-  // Sheet 1: cover / key map — nothing highlighted, gets 0 of every code.
   {
+    title: "KEY MAP",
     streets: [
-      { name: "MAIN ST", from: [0.05, 0.4], to: [0.7, 0.4] },
-      { name: "OAK RD", from: [0.35, 0.08], to: [0.35, 0.72] },
+      { name: "TARPON DR", from: [0.05, 0.3], to: [0.7, 0.3] },
+      { name: "HAVEN POINT DR", from: [0.05, 0.6], to: [0.7, 0.6] },
     ],
+    cables: [],
     poles: [],
-    note: "KEY MAP - SEE SHEETS 2 THRU 6. SPLICER: VERIFY DEAD PAIRS BEFORE CUT.",
+    splices: [],
+    notes: ["LINE CREW NOTES: PLEASE MAKE SURE YOU HAVE ALL ACCESS NUMBERS FOR YOUR P58 FORM."],
+    runs: [],
     spots: [],
+    removals: [],
   },
   {
-    streets: [{ name: "MAIN ST", from: [0.04, 0.45], to: [0.72, 0.45] }],
-    cable: { label: "AKF 50 24", path: [[0.08, 0.4], [0.4, 0.4], [0.66, 0.4]], footage: 449 },
-    poles: [{ tag: "PPR 12", at: [0.08, 0.4] }, { tag: "PPX 14", at: [0.66, 0.4] }],
-    note: "SPLICER NOTE: CUT DEAD 50 PR AT PPX 14. PLACE AIR PLUG.",
-    spots: [
-      { at: [0.66, 0.4], items: [{ code: "S10B", qty: 50 }], note: "Cut dead at PPX 14" },
-      { at: [0.4, 0.4], items: [{ code: "S63A", qty: 1 }], note: "Air plug" },
-    ],
-  },
-  {
+    title: "TARPON DR",
     streets: [
-      { name: "MAIN ST", from: [0.04, 0.3], to: [0.72, 0.3] },
-      { name: "ELM AVE", from: [0.45, 0.08], to: [0.45, 0.75] },
+      { name: "TARPON DR", from: [0.05, 0.22], to: [0.72, 0.22] },
+      { name: "3RD ST E", from: [0.3, 0.22], to: [0.22, 0.88] },
+      { name: "4TH ST E", from: [0.5, 0.22], to: [0.42, 0.88] },
     ],
-    cable: { label: "AKF 50 24", path: [[0.1, 0.35], [0.45, 0.35], [0.45, 0.65]], footage: 312 },
-    poles: [{ tag: "PPR 15", at: [0.1, 0.35] }, { tag: "PPX 18", at: [0.45, 0.65] }],
-    note: "LINE CREW NOTE: REMOVE DROP AT PPX 18.",
+    cables: [
+      { label: "AKF 50 24", footage: 312, at: [0.31, 0.32] },
+      { label: "AKF 50 24", footage: 287, at: [0.51, 0.32] },
+    ],
+    poles: [
+      { tag: "PPR", at: [0.12, 0.22] },
+      { tag: "PPX TRANSDUCER", at: [0.44, 0.84] },
+    ],
+    splices: [
+      { n: 1, at: [0.3, 0.22] },
+      { n: 2, at: [0.5, 0.22] },
+    ],
+    notes: [
+      "SPLICER NOTE: AERIAL COPPER WITH FIBER LASHED TO IT ON 3RD ST E & 4TH ST E. REMOVE ALL TERMINALS & DROPS.",
+      "SPLICER NOTE: CUT TERM TAILS BELOW GRADE AND REMOVE PEDS",
+    ],
+    runs: [],
     spots: [
-      { at: [0.45, 0.65], items: [{ code: "S10B", qty: 50 }], note: "Cut dead at PPX 18" },
-      { at: [0.45, 0.35], items: [{ code: "S63A", qty: 1 }], note: "Air plug" },
+      { at: [0.3, 0.22], items: [{ code: "P22K1", qty: 1 }, { code: "S10B", qty: 50 }], note: "Splice 1" },
+      { at: [0.5, 0.22], items: [{ code: "P22K1", qty: 1 }, { code: "S10B", qty: 50 }], note: "Splice 2" },
+    ],
+    removals: [
+      [0.29, 0.33], [0.28, 0.45], [0.27, 0.57], [0.26, 0.69], [0.49, 0.36], [0.48, 0.5], [0.47, 0.64], [0.46, 0.76],
     ],
   },
   {
-    streets: [{ name: "ELM AVE", from: [0.3, 0.06], to: [0.3, 0.78] }],
-    cable: { label: "AKF 100 24", path: [[0.34, 0.1], [0.34, 0.7]], footage: 588 },
-    poles: [{ tag: "PPR 22", at: [0.34, 0.1] }, { tag: "PPX 25", at: [0.34, 0.7] }],
-    note: "LINE CREW NOTE: S10A LIVE CUT AT PPR 22 - SEE ENGINEER.",
-    spots: [
-      { at: [0.34, 0.7], items: [{ code: "S10B", qty: 100 }], note: "Cut dead at PPX 25" },
-      { at: [0.34, 0.4], items: [{ code: "S63A", qty: 1 }], note: "Air plug" },
-    ],
-  },
-  {
+    title: "DOLPHIN DR",
     streets: [
-      { name: "ELM AVE", from: [0.04, 0.5], to: [0.72, 0.5] },
-      { name: "RIVER RD", from: [0.6, 0.06], to: [0.6, 0.78] },
+      { name: "TREASURE ISLAND CSWY", from: [0.25, 0.18], to: [0.72, 0.18] },
+      { name: "DOLPHIN DR", from: [0.08, 0.62], to: [0.68, 0.62] },
     ],
-    cable: { label: "AKF 3600 26", path: [[0.06, 0.45], [0.6, 0.45], [0.6, 0.15]], footage: 726 },
-    poles: [{ tag: "PPR 30", at: [0.25, 0.45] }, { tag: "PPX 31", at: [0.6, 0.15] }],
-    note: "SPLICER NOTE: CUT 25 PR TAP AT PPR 30. TEST/VERIFY 1800 PR AT SPLICE.",
+    cables: [
+      { label: "AKF 100 24", footage: 406, at: [0.1, 0.72] },
+      { label: "AKF 200 24", footage: 103, at: [0.58, 0.48] },
+    ],
+    poles: [
+      { tag: "PPR", at: [0.22, 0.6] },
+      { tag: "PPX RISER", at: [0.6, 0.55] },
+    ],
+    splices: [
+      { n: 3, at: [0.64, 0.6] },
+      { n: 4, at: [0.34, 0.62] },
+    ],
+    notes: [
+      "SPLICER NOTE: ON DOLPHIN DR ALL TERMINALS & DROPS HAVE BEEN REMOVED. RETIRE IN PLACE AERIAL COPPER CABLE.",
+      "SPLICER NOTE: CUT RISER BELOW GRADE",
+    ],
+    runs: [
+      { path: [[0.22, 0.55], [0.12, 0.62], [0.16, 0.76], [0.34, 0.68], [0.66, 0.66]], footage: 406, label: "AKF 100 24 retire in place" },
+      { path: [[0.22, 0.55], [0.32, 0.52], [0.42, 0.58]], footage: 246, label: "AEF 25 24 retire in place" },
+    ],
     spots: [
-      { at: [0.25, 0.45], items: [{ code: "S10B", qty: 25 }], note: "Cut 25 pr tap at PPR 30" },
-      { at: [0.6, 0.45], items: [{ code: "S16A", qty: 1800 }], note: "Test/verify at splice" },
-      { at: [0.6, 0.25], items: [{ code: "S63A", qty: 1 }], note: "Air pressure device" },
+      { at: [0.64, 0.6], items: [{ code: "P22K1", qty: 1 }, { code: "S10B", qty: 100 }], note: "Splice 3 (PPX riser)" },
+      { at: [0.34, 0.62], items: [{ code: "P22K1", qty: 1 }, { code: "S10B", qty: 25 }], note: "Splice 4" },
     ],
+    removals: [[0.3, 0.55], [0.4, 0.18], [0.52, 0.2], [0.63, 0.22], [0.7, 0.3], [0.72, 0.38], [0.71, 0.46]],
   },
   {
-    streets: [{ name: "RIVER RD", from: [0.08, 0.35], to: [0.72, 0.35] }],
-    cable: { label: "AKF 3600 26", path: [[0.1, 0.4], [0.68, 0.4]], footage: 1040 },
-    poles: [{ tag: "PPR 33", at: [0.1, 0.4] }, { tag: "PPX 36", at: [0.68, 0.4] }],
-    note: "SPLICER NOTE: CUT DEAD 3600 PR FEEDER AT PPX 36. TEST/VERIFY 1800 PR.",
+    title: "PARADISE BLVD",
+    streets: [{ name: "PARADISE BLVD", from: [0.3, 0.08], to: [0.3, 0.85] }],
+    cables: [],
+    poles: [],
+    splices: [],
+    notes: ["LINE CREW NOTES: REMOVE CABLE AND POLES THAT APPLY"],
+    runs: [],
+    spots: [],
+    removals: [],
+  },
+  {
+    title: "HAVEN POINT DR",
+    streets: [
+      { name: "HAVEN POINT DR", from: [0.08, 0.32], to: [0.62, 0.62] },
+      { name: "SANDY HOOK RD", from: [0.2, 0.25], to: [0.7, 0.45] },
+    ],
+    cables: [
+      { label: "ASP 1800 26", footage: 30, at: [0.2, 0.5] },
+      { label: "AKF 1200 26", footage: 25, at: [0.13, 0.66] },
+      { label: "AKF 100 24", footage: 255, at: [0.2, 0.42] },
+    ],
+    poles: [
+      { tag: "PPX", at: [0.21, 0.24] },
+      { tag: "PPX TRANSDUCER", at: [0.1, 0.58] },
+    ],
+    splices: [{ n: 5, at: [0.18, 0.36] }],
+    notes: ["SPLICER NOTE: CUT CABLES BELOW GRADE AND REMOVE XBOX AND PAD", "SPLICER NOTE: REMOVE TRANSDUCER"],
+    runs: [],
     spots: [
       {
-        at: [0.68, 0.4],
+        at: [0.15, 0.36],
         items: [
-          { code: "S10B", qty: 3600 },
           { code: "S16A", qty: 1800 },
+          { code: "S10A", qty: 1800 },
+          { code: "S10B", qty: 3600 },
         ],
-        note: "Cut dead feeder + test/verify",
+        note: "Splice 5: cut & cap main cable",
       },
-      { at: [0.4, 0.4], items: [{ code: "S63A", qty: 1 }], note: "Air pressure device" },
+      { at: [0.66, 0.24], items: [{ code: "S16A", qty: 1800 }], note: "South Beach Golf" },
     ],
+    removals: [[0.08, 0.42], [0.58, 0.72]],
   },
 ];
 
@@ -117,42 +181,52 @@ export async function buildDemoPdf(): Promise<Uint8Array> {
     for (const s of pg.streets) {
       const a = P(s.from);
       const b = P(s.to);
-      page.drawLine({ start: a, end: b, thickness: 14, color: rgb(0.88, 0.88, 0.88) });
-      const horiz = Math.abs(a.y - b.y) < 1;
-      page.drawText(s.name, {
-        x: horiz ? (a.x + b.x) / 2 - 30 : a.x + 12,
-        y: horiz ? a.y + 12 : (a.y + b.y) / 2,
-        size: 11,
-        font: bold,
-        color: grey,
-      });
+      page.drawLine({ start: a, end: b, thickness: 14, color: rgb(0.9, 0.9, 0.9) });
+      page.drawLine({ start: a, end: b, thickness: 1.2, color: ink });
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      page.drawText(s.name, { x: mid.x + 8, y: mid.y + 10, size: 10, font: bold, color: grey });
     }
-    if (pg.cable) {
-      const pts = pg.cable.path.map(P);
-      for (let k = 1; k < pts.length; k++) page.drawLine({ start: pts[k - 1], end: pts[k], thickness: 2, color: ink });
-      const mid = pts[Math.floor(pts.length / 2) - 1] ?? pts[0];
-      page.drawText(pg.cable.label, { x: mid.x + 8, y: mid.y - 16, size: 10, font, color: ink });
-      page.drawText(`${pg.cable.footage}'`, { x: mid.x + 8, y: mid.y - 29, size: 10, font, color: ink });
+    for (const c of pg.cables) {
+      const at = P(c.at);
+      page.drawText("PPR", { x: at.x, y: at.y + 14, size: 9, font: bold, color: ink });
+      page.drawText("2423.101 06.1990", { x: at.x, y: at.y + 3, size: 7, font, color: ink });
+      page.drawText(c.label, { x: at.x, y: at.y - 7, size: 7, font, color: ink });
+      page.drawText(`${c.footage}'`, { x: at.x, y: at.y - 17, size: 7, font, color: ink });
     }
     for (const pole of pg.poles) {
       const c = P(pole.at);
-      page.drawCircle({ x: c.x, y: c.y, size: 5, borderColor: ink, borderWidth: 1.2 });
-      page.drawText(pole.tag, { x: c.x - 16, y: c.y + 10, size: 9, font, color: ink });
+      page.drawCircle({ x: c.x, y: c.y, size: 4, borderColor: ink, borderWidth: 1 });
+      page.drawText(pole.tag, { x: c.x + 7, y: c.y - 3, size: 8, font, color: ink });
     }
-    if (pg.note) page.drawText(pg.note, { x: 28, y: PAGE_H - 44, size: 10, font: bold, color: ink });
+    for (const s of pg.splices) {
+      const c = P(s.at);
+      page.drawLine({ start: { x: c.x - 6, y: c.y - 6 }, end: { x: c.x + 6, y: c.y + 6 }, thickness: 2, color: ink });
+      page.drawLine({ start: { x: c.x - 2, y: c.y - 8 }, end: { x: c.x + 8, y: c.y + 2 }, thickness: 2, color: ink });
+      page.drawCircle({ x: c.x + 18, y: c.y - 16, size: 9, borderColor: ink, borderWidth: 1 });
+      page.drawText(String(s.n), { x: c.x + 15, y: c.y - 20, size: 9, font: bold, color: ink });
+    }
+    for (const r of pg.removals) {
+      const c = P(r);
+      page.drawText("X", { x: c.x - 3, y: c.y - 4, size: 10, font, color: ink });
+    }
+    pg.notes.forEach((n, k) => {
+      const y = PAGE_H - 40 - k * 26;
+      page.drawRectangle({ x: 26, y: y - 6, width: font.widthOfTextAtSize(n, 9) + 12, height: 20, borderColor: ink, borderWidth: 0.8 });
+      page.drawText(n, { x: 32, y, size: 9, font, color: ink });
+    });
 
-    // Title block (bottom right)
-    const tb = { x: 890, y: 24, w: 310, h: 200 };
+    // Title block (bottom right), laid out like the real prints.
+    const tb = { x: 920, y: 24, w: 280, h: 190 };
     page.drawRectangle({ x: tb.x, y: tb.y, width: tb.w, height: tb.h, borderColor: ink, borderWidth: 1 });
     const lines = [
-      "COPPER RETIREMENT WORK PRINT (DEMO)",
-      `W.O. # ${DEMO_WO}`,
-      "PROJECT # CR-26-0187",
-      "ENGINEER: J. SAMPLE / R. DEMO",
-      `SHEET ${i + 1} OF ${total}`,
+      `70330 WO #${DEMO_WO}`,
+      "KCI ENG: A. SAMPLE PHONE: 000-000-0000",
+      "FTR ENG: B. SAMPLE PHONE: 000-000-0000",
+      "PROJECT NUMBER: 4222352",
+      `SHT: ${i + 1} OF ${total}  ${pg.title}`,
     ];
-    lines.forEach((t, k) => page.drawText(t, { x: tb.x + 10, y: tb.y + tb.h - 18 - k * 15, size: 10, font: k ? font : bold, color: ink }));
-    page.drawText("UNITS / ACCT CODES:", { x: tb.x + 10, y: tb.y + 96, size: 9, font: bold, color: ink });
+    lines.forEach((t, k) => page.drawText(t, { x: tb.x + 10, y: tb.y + tb.h - 18 - k * 14, size: 9, font: k ? font : bold, color: ink }));
+    page.drawText("UNITS / ACCT CODES", { x: tb.x + 10, y: tb.y + 96, size: 9, font: bold, color: ink });
     page.drawRectangle({ x: tb.x + 8, y: tb.y + 8, width: tb.w - 16, height: 82, borderColor: grey, borderWidth: 0.8 });
   });
 
@@ -162,35 +236,27 @@ export async function buildDemoPdf(): Promise<Uint8Array> {
 /** Crew markups for the demo job; sheetIds must be in page order. */
 export function buildDemoMarks(jobId: string, sheetIds: string[], now = new Date().toISOString()): Mark[] {
   const marks: Mark[] = [];
+  const base = { jobId, createdBy: DEMO_USER, createdAt: now };
   DEMO_PAGES.forEach((pg, i) => {
     const sheetId = sheetIds[i];
-    if (pg.cable && pg.spots.length) {
+    pg.runs.forEach((r, k) =>
       marks.push({
-        id: `demo-run-${i + 1}`,
-        jobId,
+        ...base,
+        id: `demo-run-${i + 1}-${k + 1}`,
         sheetId,
         kind: "run",
-        points: pg.cable.path,
-        lengthFt: pg.cable.footage,
-        pairCount: Number(pg.cable.label.split(" ")[1]),
+        points: r.path,
+        lengthFt: r.footage,
+        pairCount: Number(r.label.split(" ")[1]) || undefined,
         items: [],
-        note: `Highlighted ${pg.cable.label}`,
-        createdBy: DEMO_USER,
-        createdAt: now,
-      });
-    }
-    pg.spots.forEach((s, k) =>
-      marks.push({
-        id: `demo-spot-${i + 1}-${k + 1}`,
-        jobId,
-        sheetId,
-        kind: "spot",
-        points: [s.at],
-        items: s.items,
-        note: s.note,
-        createdBy: DEMO_USER,
-        createdAt: now,
+        note: r.label,
       }),
+    );
+    pg.spots.forEach((s, k) =>
+      marks.push({ ...base, id: `demo-spot-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [s.at], items: s.items, note: s.note }),
+    );
+    pg.removals.forEach((at, k) =>
+      marks.push({ ...base, id: `demo-rm-${i + 1}-${k + 1}`, sheetId, kind: "spot", points: [at], items: [], note: "Removal" }),
     );
   });
   return marks;

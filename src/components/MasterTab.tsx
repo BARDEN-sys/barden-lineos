@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { parseMasterText } from "@/lib/masterParse";
+import { parseSpokenCodes } from "@/lib/voice";
 import { MasterItem, type MasterItem as MasterRow } from "@/lib/types";
+import { CameraButtons } from "./CameraButtons";
 import { useJob } from "./JobProvider";
+import { VoiceButton } from "./VoiceButton";
 
 export function MasterTab() {
   const { job, dispatch } = useJob();
@@ -12,7 +15,6 @@ export function MasterTab() {
   const [preview, setPreview] = useState<MasterRow[] | null>(null);
   const [ocrStatus, setOcrStatus] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
   if (!job) return null;
 
   const setMaster = (master: MasterRow[]) => dispatch({ type: "master", master });
@@ -26,7 +28,7 @@ export function MasterTab() {
     setDraft({ code: "", description: "", estQty: "" });
   }
 
-  async function ocr(file: File) {
+  async function ocr(file: Blob) {
     setOcrStatus("Reading screenshot…");
     setPreview(null);
     try {
@@ -95,9 +97,20 @@ export function MasterTab() {
       </section>
 
       <section className="card flex flex-col gap-3">
-        <h2 className="font-bold">Import from a screenshot or text</h2>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) ocr(f); e.target.value = ""; }} />
-        <button className="btn-ghost self-start" onClick={() => fileRef.current?.click()}>Upload screenshot (OCR)</button>
+        <h2 className="font-bold">Import from a photo, screenshot, voice or text</h2>
+        <CameraButtons onFiles={(f) => ocr(f[0])} takeLabel="Photo of master list" chooseLabel="Choose screenshot" />
+        <VoiceButton
+          label='Speak rows ("S10B 3825")'
+          onText={(text) => {
+            const rows = parseSpokenCodes(text, job.glossary.map((g) => g.code)).map((it) => ({
+              code: it.code,
+              description: job.glossary.find((g) => g.code === it.code)?.description ?? "",
+              estQty: it.qty,
+            }));
+            setPreview(rows);
+            setOcrStatus(rows.length ? `Heard ${rows.length} rows. Check them, then apply.` : `No codes heard in "${text}". Codes must be in the Codes tab first.`);
+          }}
+        />
         <textarea
           className="input min-h-28 py-2 font-mono text-sm"
           placeholder={"Or paste rows:\nS10B  Cut Pairs Dead  3825"}

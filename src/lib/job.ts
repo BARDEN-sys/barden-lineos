@@ -34,6 +34,7 @@ export async function jobFromPrint(bytes: Uint8Array, pdfName: string, user = DE
     glossary: SEED_GLOSSARY.map((g) => ({ ...g })),
     marks: [],
     overrides: [],
+    photos: [],
     createdBy: user,
     createdAt: new Date().toISOString(),
   };

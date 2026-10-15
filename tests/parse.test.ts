@@ -39,6 +39,28 @@ describe("parsePage", () => {
   });
 });
 
+describe("parsePage on real-print title blocks", () => {
+  it("reads WO #, PROJECT NUMBER, KCI/FTR ENG and SHT", () => {
+    const p = parsePage(
+      [
+        t("70330 WO #4222352", 1500, 300),
+        t("KCI ENG: CHRIS SAMPLE PHONE:813-000-0000", 1500, 285),
+        t("FTR ENG: SETH SAMPLE", 1500, 270),
+        t("PROJECT NUMBER: 4222058", 1500, 255),
+        t("SHT: 1 OF 1", 1500, 240),
+      ],
+      2000,
+    );
+    expect(p.header).toEqual({ woNumber: "4222352", projectNumber: "4222058", engineers: ["CHRIS SAMPLE", "SETH SAMPLE"] });
+    expect(p.label).toBe("1 of 1");
+  });
+  it("reads cable labels like ASP 1800 26 and SS 101 24", () => {
+    const p = parsePage([t("ASP 1800 26", 10, 100), t("SS 101 24", 10, 80), t("764'", 10, 70)], 2000);
+    expect(p.cableLabels).toEqual(["ASP 1800 26", "SS 101 24"]);
+    expect(p.footages).toEqual([764]);
+  });
+});
+
 describe("parseMasterText", () => {
   it("parses OCR rows and fixes common OCR slips", () => {
     const text = [
