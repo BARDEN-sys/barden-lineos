@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (c.channel !== "email") return { ok: false, error: "Enter your email address.", channel: c.channel };
     const res = await supabase().auth.signInWithOtp({
       email: c.value,
-      options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/login` },
+      options: { shouldCreateUser: true, emailRedirectTo: window.location.origin },
     });
     return res.error ? { ok: false, error: friendlyAuthError(res.error.message), channel: c.channel } : { ok: true, channel: c.channel };
   }, []);
