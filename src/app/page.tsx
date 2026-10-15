@@ -45,8 +45,11 @@ export default function Home() {
       </header>
 
       <section className="card flex flex-col gap-3">
-        <h2 className="font-bold">New job</h2>
-        <p className="text-sm text-slate-600">Work print PDF (multi-page). Text is read on this device.</p>
+        <h2 className="font-bold">New job / project</h2>
+        <p className="text-sm text-slate-600">
+          Upload the work print PDF for the new WO. It becomes its own job on this phone, with its own master list,
+          marks, task codes and daily input. Text is read on this device.
+        </p>
         <input
           ref={fileRef}
           type="file"
@@ -93,7 +96,9 @@ export default function Home() {
                   }}
                 >
                   <span className="block font-semibold">
-                    WO {j.woNumber || "—"} {j.id === job?.id && <span className="chip ml-1 border-emerald-300 bg-emerald-50 text-emerald-800">open</span>}
+                    WO {j.woNumber || "—"}
+                    {j.projectNumber && j.projectNumber !== j.woNumber && <span className="font-normal text-slate-500"> · Project {j.projectNumber}</span>}{" "}
+                    {j.id === job?.id && <span className="chip ml-1 border-emerald-300 bg-emerald-50 text-emerald-800">open</span>}
                   </span>
                   <span className="block text-xs text-slate-500">
                     {j.sheets} sheets · {j.marks} marks · {j.dailyRows} daily rows · {j.photos} photos · saved{" "}

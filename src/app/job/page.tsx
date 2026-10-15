@@ -43,7 +43,9 @@ export default function JobPage() {
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-900 text-white">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Link href="/" className="text-xs font-bold tracking-[0.2em] text-slate-400">LINEOS</Link>
+          <Link href="/" className="btn min-h-9 shrink-0 border border-slate-600 px-3 text-xs text-slate-200" aria-label="All jobs and new job">
+            ☰ Jobs
+          </Link>
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold">WO {job.header.woNumber || "—"}</p>
             <p className="truncate text-xs text-slate-400">
