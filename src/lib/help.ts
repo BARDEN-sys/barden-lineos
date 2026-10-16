@@ -41,7 +41,7 @@ export const HELP: HelpTopic[] = [
   },
   {
     id: "measure",
-    title: "Measure a run on Google Maps or by walking",
+    title: "Measure a run on the map or by walking",
     keywords: ["measure", "map", "maps", "google", "gps", "walk", "feet", "footage", "length", "distance", "street"],
     steps: [
       "On the Sheets tab, tap a yellow run to open it.",
@@ -143,7 +143,7 @@ export const HELP: HelpTopic[] = [
       "Everything you do saves on this device right away, even with no signal.",
       "When you get signal again, shared projects upload by themselves.",
       "The chip at the top says Synced when everything is uploaded.",
-      "The Google map needs signal. Walk it with GPS works without signal.",
+      "The map needs signal. Walk it with GPS works without signal.",
     ],
   },
   {

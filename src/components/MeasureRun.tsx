@@ -1,45 +1,24 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Google Maps is loaded at runtime, untyped. */
-
+import "leaflet/dist/leaflet.css";
+import type { Map as LeafletMap, Polyline, LayerGroup, TileLayer } from "leaflet";
 import { useEffect, useRef, useState } from "react";
 import { acceptFix, MAX_ACCURACY_M, pathFt, type GpsFix, type LatLng } from "@/lib/geo";
 
-const MAPS_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-
-declare global {
-  interface Window {
-    google?: any;
-    __lineosMapsReady?: () => void;
-  }
-}
-
-let mapsLoading: Promise<any> | null = null;
-function loadGoogleMaps(): Promise<any> {
-  if (window.google?.maps?.Map) return Promise.resolve(window.google.maps);
-  if (mapsLoading) return mapsLoading;
-  mapsLoading = new Promise((resolve, reject) => {
-    window.__lineosMapsReady = () => resolve(window.google.maps);
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(MAPS_KEY)}&v=weekly&callback=__lineosMapsReady`;
-    s.async = true;
-    s.onerror = () => {
-      mapsLoading = null;
-      s.remove();
-      reject(new Error("Google Maps didn't load. Check the signal and try again."));
-    };
-    document.head.appendChild(s);
-  });
-  return mapsLoading;
-}
+// Free maps, no key or account: OpenStreetMap streets, Esri satellite photos, OpenStreetMap search.
+const STREETS = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const STREETS_CREDIT = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const SATELLITE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const SAT_LABELS = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
+const SAT_CREDIT = "Imagery &copy; Esri, Maxar, Earthstar Geographics";
 
 const LAST_VIEW = "lineos-map-view";
 
-/** Full-screen measuring: tap along the street on Google Maps, or walk the run with GPS. */
+/** Full-screen measuring: tap along the street on the map, or walk the run with GPS. */
 export function MeasureRun({ streets, onUse, onClose }: { streets: string[]; onUse: (ft: number, how: "map" | "gps") => void; onClose: () => void }) {
-  const [mode, setMode] = useState<"map" | "walk">(MAPS_KEY ? "map" : "walk");
+  const [mode, setMode] = useState<"map" | "walk">("map");
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-label="Measure run">
+    <div className="fixed inset-0 z-[1000] flex flex-col bg-white" role="dialog" aria-label="Measure run">
       <div className="flex items-center gap-2 border-b border-slate-200 p-3">
         <h2 className="font-bold">📏 Measure run</h2>
         <div className="ml-2 flex gap-1">
@@ -57,113 +36,118 @@ export function MeasureRun({ streets, onUse, onClose }: { streets: string[]; onU
   );
 }
 
-function MapMeasure({ streets, onUse }: { streets: string[]; onUse: (ft: number) => void }) {
+function MapMeasure({ streets: fromSheet, onUse }: { streets: string[]; onUse: (ft: number) => void }) {
+  // Skip print text that isn't a street name ("2 OF 5 TARPON DR", "TO IT ON 3RD ST").
+  const streets = fromSheet.filter((s) => !/\bOF\b|^TO\b|\bON\b/.test(s));
   const divRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const lineRef = useRef<any>(null);
-  const dotsRef = useRef<any[]>([]);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const lineRef = useRef<Polyline | null>(null);
+  const dotsRef = useRef<LayerGroup | null>(null);
+  const layersRef = useRef<{ streets: TileLayer; sat: TileLayer; labels: TileLayer } | null>(null);
   const [path, setPath] = useState<LatLng[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [satellite, setSatellite] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!MAPS_KEY) return;
     let cancelled = false;
-    loadGoogleMaps()
-      .then((maps) => {
-        if (cancelled || !divRef.current) return;
-        let view = { center: { lat: 27.95, lng: -82.46 }, zoom: 17 };
+    let map: LeafletMap | null = null;
+    import("leaflet").then((L) => {
+      if (cancelled || !divRef.current) return;
+      let view = { center: { lat: 27.95, lng: -82.46 }, zoom: 17 };
+      let saved = false;
+      try {
+        const v = localStorage.getItem(LAST_VIEW);
+        if (v) {
+          view = JSON.parse(v);
+          saved = true;
+        }
+      } catch {}
+      map = L.map(divRef.current, { zoomControl: true, maxZoom: 20 }).setView(view.center, view.zoom);
+      mapRef.current = map;
+      layersRef.current = {
+        streets: L.tileLayer(STREETS, { maxZoom: 20, maxNativeZoom: 19, attribution: STREETS_CREDIT }),
+        sat: L.tileLayer(SATELLITE, { maxZoom: 20, maxNativeZoom: 19, attribution: SAT_CREDIT }),
+        labels: L.tileLayer(SAT_LABELS, { maxZoom: 20, maxNativeZoom: 19 }),
+      };
+      layersRef.current.sat.addTo(map);
+      layersRef.current.labels.addTo(map);
+      lineRef.current = L.polyline([], { color: "#facc15", weight: 7, opacity: 0.9, interactive: false }).addTo(map);
+      dotsRef.current = L.layerGroup().addTo(map);
+      map.on("click", (e) => setPath((p) => [...p, { lat: e.latlng.lat, lng: e.latlng.lng }]));
+      map.on("moveend", () => {
         try {
-          const saved = localStorage.getItem(LAST_VIEW);
-          if (saved) view = JSON.parse(saved);
+          const c = map!.getCenter();
+          localStorage.setItem(LAST_VIEW, JSON.stringify({ center: { lat: c.lat, lng: c.lng }, zoom: map!.getZoom() }));
         } catch {}
-        const map = new maps.Map(divRef.current, {
-          ...view,
-          mapTypeId: "hybrid",
-          gestureHandling: "greedy",
-          clickableIcons: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          mapTypeControl: false,
-          tilt: 0,
-        });
-        mapRef.current = map;
-        lineRef.current = new maps.Polyline({ map, strokeColor: "#facc15", strokeOpacity: 0.9, strokeWeight: 7, clickable: false });
-        map.addListener("click", (e: any) => setPath((p) => [...p, { lat: e.latLng.lat(), lng: e.latLng.lng() }]));
-        map.addListener("idle", () => {
-          try {
-            const c = map.getCenter();
-            localStorage.setItem(LAST_VIEW, JSON.stringify({ center: { lat: c.lat(), lng: c.lng() }, zoom: map.getZoom() }));
-          } catch {}
-        });
-        // First time: start where the phone is.
-        if (!localStorage.getItem(LAST_VIEW)) goToMe();
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+      });
+      setReady(true);
+      // First time: start where the phone is.
+      if (!saved) goToMe();
+    });
     return () => {
       cancelled = true;
+      map?.remove();
+      mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Redraw the yellow line and the tap points.
   useEffect(() => {
-    const maps = window.google?.maps;
-    if (!maps || !mapRef.current || !lineRef.current) return;
-    lineRef.current.setPath(path);
-    dotsRef.current.forEach((d) => d.setMap(null));
-    dotsRef.current = path.map(
-      (p) =>
-        new maps.Circle({
-          map: mapRef.current,
-          center: p,
-          radius: 0.8,
-          strokeColor: "#0f172a",
-          strokeWeight: 2,
-          fillColor: "#facc15",
-          fillOpacity: 1,
-          clickable: false,
-        }),
-    );
-  }, [path]);
+    if (!ready) return;
+    void import("leaflet").then((L) => {
+      lineRef.current?.setLatLngs(path);
+      dotsRef.current?.clearLayers();
+      for (const p of path) {
+        L.circleMarker(p, { radius: 6, color: "#0f172a", weight: 2, fillColor: "#facc15", fillOpacity: 1, interactive: false }).addTo(dotsRef.current!);
+      }
+    });
+  }, [path, ready]);
 
   useEffect(() => {
-    mapRef.current?.setMapTypeId(satellite ? "hybrid" : "roadmap");
-  }, [satellite]);
+    const map = mapRef.current;
+    const l = layersRef.current;
+    if (!map || !l) return;
+    if (satellite) {
+      l.streets.remove();
+      l.sat.addTo(map);
+      l.labels.addTo(map);
+    } else {
+      l.sat.remove();
+      l.labels.remove();
+      l.streets.addTo(map);
+    }
+  }, [satellite, ready]);
 
   function goToMe() {
     navigator.geolocation?.getCurrentPosition(
-      (pos) => {
-        mapRef.current?.setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        mapRef.current?.setZoom(18);
-      },
+      (pos) => mapRef.current?.setView({ lat: pos.coords.latitude, lng: pos.coords.longitude }, 19),
       () => setError("Couldn't get your location. Search for the street instead."),
       { enableHighAccuracy: true, timeout: 10000 },
     );
   }
 
-  function find(q: string) {
-    const maps = window.google?.maps;
-    if (!maps || !q.trim()) return;
+  async function find(q: string) {
+    const map = mapRef.current;
+    if (!map || !q.trim()) return;
     setError(null);
-    new maps.Geocoder().geocode({ address: q, bounds: mapRef.current?.getBounds() }, (results: any[], status: string) => {
-      if (status === "OK" && results[0]) {
-        const g = results[0].geometry;
-        if (g.viewport) mapRef.current.fitBounds(g.viewport);
-        else mapRef.current.setCenter(g.location);
-      } else setError(`Couldn't find “${q}”. Add the town, e.g. “${q}, Tampa FL”.`);
-    });
-  }
-
-  if (!MAPS_KEY) {
-    return (
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          The Google map isn&apos;t switched on yet (it needs the Google Maps key). Use <b>🚶 Walk it</b> for now.
-        </p>
-      </div>
-    );
+    try {
+      const b = map.getBounds().pad(20);
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us" +
+        `&viewbox=${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const [hit] = (await res.json()) as { lat: string; lon: string; boundingbox?: string[] }[];
+      if (!hit) return setError(`Couldn't find “${q}”. Add the town, e.g. “${q}, Tampa FL”.`);
+      if (hit.boundingbox) {
+        const [s, n, w, e] = hit.boundingbox.map(Number);
+        map.fitBounds([[s, w], [n, e]], { maxZoom: 19 });
+      } else map.setView({ lat: Number(hit.lat), lng: Number(hit.lon) }, 18);
+    } catch {
+      setError("Search needs signal. Tap 📍 Me or move the map by hand.");
+    }
   }
 
   const ft = pathFt(path);
@@ -173,7 +157,7 @@ function MapMeasure({ streets, onUse }: { streets: string[]; onUse: (ft: number)
         className="flex gap-2 p-3"
         onSubmit={(e) => {
           e.preventDefault();
-          find(search);
+          void find(search);
         }}
       >
         <input className="input flex-1" placeholder="Street or address" value={search} onChange={(e) => setSearch(e.target.value)} enterKeyHint="search" />
@@ -184,17 +168,14 @@ function MapMeasure({ streets, onUse }: { streets: string[]; onUse: (ft: number)
         <div className="flex gap-1 overflow-x-auto px-3 pb-2">
           <span className="shrink-0 text-xs text-slate-500">On sheet:</span>
           {streets.map((s) => (
-            <button key={s} className="chip shrink-0 border-slate-300" onClick={() => { setSearch(s); find(s); }}>{s}</button>
+            <button key={s} className="chip shrink-0 border-slate-300" onClick={() => { setSearch(s); void find(s); }}>{s}</button>
           ))}
         </div>
       )}
       {error && <p className="mx-3 mb-2 rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
       <div className="relative flex-1">
         <div ref={divRef} className="absolute inset-0 bg-slate-200" />
-        <button
-          className="btn absolute top-2 right-2 border border-slate-300 bg-white shadow"
-          onClick={() => setSatellite((v) => !v)}
-        >
+        <button className="btn absolute top-2 right-2 z-[500] border border-slate-300 bg-white shadow" onClick={() => setSatellite((v) => !v)}>
           {satellite ? "Street map" : "Satellite"}
         </button>
       </div>
