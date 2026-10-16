@@ -20,8 +20,8 @@ export function MeasureRun({ streets, onUse, onClose }: { streets: string[]; onU
   return (
     <div className="fixed inset-0 z-[1000] flex flex-col bg-white" role="dialog" aria-label="Measure run">
       <div className="flex items-center gap-2 border-b border-slate-200 p-3">
-        <h2 className="font-bold">📏 Measure run</h2>
-        <div className="ml-2 flex gap-1">
+        <h2 className="hidden font-bold sm:block">📏 Measure run</h2>
+        <div className="flex gap-1 sm:ml-2">
           <button className={`btn border ${mode === "map" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300"}`} onClick={() => setMode("map")}>
             🗺️ Map
           </button>
@@ -184,7 +184,7 @@ function MapMeasure({ streets: fromSheet, onUse }: { streets: string[]; onUse: (
         <span className="text-2xl font-bold">{ft.toLocaleString()}′</span>
         <button className="btn-ghost ml-auto" disabled={!path.length} onClick={() => setPath((p) => p.slice(0, -1))}>Undo</button>
         <button className="btn-ghost" disabled={!path.length} onClick={() => setPath([])}>Clear</button>
-        <button className="btn-primary" disabled={path.length < 2} onClick={() => onUse(ft)}>Use {ft.toLocaleString()} ft</button>
+        <button className="btn-primary w-full sm:w-auto" disabled={path.length < 2} onClick={() => onUse(ft)}>Use {ft.toLocaleString()} ft</button>
       </div>
     </div>
   );
