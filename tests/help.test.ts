@@ -8,6 +8,8 @@ describe("help desk", () => {
     expect(findHelp("invite my crew by text")[0].id).toBe("crew");
     expect(findHelp("no signal")[0].id).toBe("offline");
     expect(findHelp("measuring footage")[0].id).toBe("measure");
+    expect(findHelp("make someone a foreman")[0].id).toBe("foreman");
+    expect(findHelp("can a foreman send a sign up link")[0].id).toMatch(/foreman|crew/);
     expect(findHelp("how do I")).toEqual([]);
   });
 

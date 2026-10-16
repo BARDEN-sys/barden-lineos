@@ -116,12 +116,26 @@ export const HELP: HelpTopic[] = [
   {
     id: "crew",
     title: "Add your crew (invite by text or email)",
-    keywords: ["crew", "invite", "member", "share", "team", "text", "add", "people", "worker", "foreman"],
+    keywords: ["crew", "invite", "member", "share", "team", "text", "add", "people", "worker", "link", "signup", "sign up"],
     steps: [
+      "Only a foreman can send invites.",
       "Open the project and tap Crew at the top.",
       "The first time, pick New crew, type a crew name, then tap Share project.",
-      "Under Invite, type the person's cell number and tap Send by text, or type their email and tap Send by email.",
+      "Under Invite, pick Crew or Foreman for the person's role.",
+      "Type the person's cell number and tap Send by text, or type their email and tap Send by email.",
       "They tap the link, sign in with their email, and tap Join.",
+    ],
+  },
+  {
+    id: "foreman",
+    title: "Make someone a foreman (who can do what)",
+    keywords: ["foreman", "role", "roles", "boss", "lead", "permission", "allowed", "change", "remove", "who"],
+    steps: [
+      "A foreman can send invites, change roles, remove people, change the master list and task codes, and export sheets and reports.",
+      "A crew member can mark runs and spots, measure, take photos and enter daily rows. They cannot change master numbers or export.",
+      "To make a new person a foreman, pick Foreman as the role when you invite them.",
+      "To make someone already on the crew a foreman, tap Crew at the top, find their name, and change Crew to Foreman.",
+      "You can have more than one foreman. Only make someone a foreman if you trust them with the master numbers.",
     ],
   },
   {
