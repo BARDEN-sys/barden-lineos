@@ -30,9 +30,10 @@ export const HELP: HelpTopic[] = [
   {
     id: "mark",
     title: "Mark runs and spots on a sheet",
-    keywords: ["mark", "run", "spot", "highlight", "sheet", "draw", "cut", "removal", "tap", "yellow", "pink"],
+    keywords: ["mark", "run", "spot", "highlight", "sheet", "draw", "cut", "removal", "tap", "yellow", "pink", "zoom", "pinch"],
     steps: [
       "Open the project and tap the Sheets tab, then pick a sheet.",
+      "Pinch the drawing to zoom in. Drag with two fingers to move around. Double tap to zoom back out.",
       "For a highlighted cable run, tap Run, tap along the run, then tap Finish run.",
       "For a cut, splice or removal location, tap Spot, then tap the spot on the sheet.",
       "In the box that opens, tap Add code, pick the code and type the count. Or tap Speak codes and say them, like S10B 50.",

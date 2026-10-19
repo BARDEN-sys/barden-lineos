@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { workPerformed } from "@/lib/allocation";
 import { downscalePhoto } from "@/lib/image";
 import { newId } from "@/lib/job";
 import { parseSpokenCodes } from "@/lib/voice";
 import { DEFAULT_WORK_BOX } from "@/lib/output";
 import { currentUser } from "@/lib/user";
+import { activeStep, clampView, pinchView, viewerToPage, zoomAt, ZOOM_STEPS, type View } from "@/lib/zoom";
 import { type Mark, type MarkItem, type Photo, type Point, type Sheet } from "@/lib/types";
 import { CameraButtons } from "./CameraButtons";
 import { MeasureRun } from "./MeasureRun";
@@ -48,28 +49,112 @@ export function SheetsTab() {
   );
 }
 
+type Gesture = {
+  pts: Map<number, Point>;
+  /** tap: one finger, not moved yet · pan: one-finger drag in Select · drag: one-finger drag in a marking tool (does nothing) · pinch: two fingers · done: ignore until all fingers lift */
+  mode: "none" | "tap" | "pan" | "drag" | "pinch" | "done";
+  start: View;
+  p0: Point;
+  m0: Point;
+  d0: number;
+  target: Element | null;
+};
+
+const TAP_SLOP = 8; // px a finger may wander and still count as a tap
+const DOUBLE_TAP_MS = 300;
+const RENDER_DEBOUNCE_MS = 250;
+
+const mid = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
 function SheetView({ sheet }: { sheet: Sheet }) {
   const { job, result, dispatch } = useJob();
   const [tool, setTool] = useState<Tool>("view");
   const [draft, setDraft] = useState<Point[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [baseWidth, setBaseWidth] = useState(0);
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 }); // viewer box
+  const sizeRef = useRef(size);
+  const [view, setViewState] = useState<View>({ z: 1, tx: 0, ty: 0 });
+  const viewRef = useRef(view);
+  // The PDF bitmap's zoom; catches up with `view.z` once a gesture settles.
+  const [renderZoom, setRenderZoom] = useState(1);
+  const renderTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gesture = useRef<Gesture>({ pts: new Map(), mode: "none", start: view, p0: [0, 0], m0: [0, 0], d0: 0, target: null });
+  const lastTap = useRef<{ t: number; p: Point; undo?: () => void } | null>(null);
+  const aspect = sheet.heightPt / sheet.widthPt;
+
+  const applyView = useCallback(
+    (v: View) => {
+      const { w, h } = sizeRef.current;
+      const next = clampView(v, w, w * aspect, w, h);
+      viewRef.current = next;
+      setViewState(next);
+      if (renderTimer.current) clearTimeout(renderTimer.current);
+      const settle = () => {
+        if (gesture.current.pts.size) renderTimer.current = setTimeout(settle, RENDER_DEBOUNCE_MS);
+        else setRenderZoom(viewRef.current.z);
+      };
+      renderTimer.current = setTimeout(settle, RENDER_DEBOUNCE_MS);
+    },
+    [aspect],
+  );
+
+  useEffect(() => () => { if (renderTimer.current) clearTimeout(renderTimer.current); }, []);
 
   useEffect(() => {
-    const el = wrapRef.current;
+    const el = viewerRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setBaseWidth(Math.floor(e.contentRect.width)));
+    const ro = new ResizeObserver(([e]) => {
+      const w = Math.floor(e.contentRect.width);
+      const h = Math.floor(e.contentRect.height);
+      const old = sizeRef.current.w;
+      sizeRef.current = { w, h };
+      setSize({ w, h });
+      const v = viewRef.current;
+      applyView(old > 0 ? { ...v, tx: (v.tx * w) / old, ty: (v.ty * w) / old } : v);
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [applyView]);
+
+  // Keep the browser's own pinch / double-tap zoom off the drawing (iOS Safari ignores touch-action
+  // for page zoom unless the gesture events are cancelled). Trackpad pinch and wheel arrive as wheel.
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const block = (e: Event) => e.preventDefault();
+    const multiTouch = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); };
+    const wheel = (e: WheelEvent) => {
+      const v = viewRef.current;
+      const r = el.getBoundingClientRect();
+      const { w, h } = sizeRef.current;
+      if (e.ctrlKey) {
+        e.preventDefault();
+        applyView(zoomAt(v, v.z * Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top));
+      } else if (w * v.z > w || w * aspect * v.z > h) {
+        e.preventDefault();
+        applyView({ ...v, tx: v.tx - e.deltaX, ty: v.ty - e.deltaY });
+      }
+    };
+    const opts = { passive: false } as const;
+    for (const t of ["gesturestart", "gesturechange", "gestureend"]) el.addEventListener(t, block, opts);
+    el.addEventListener("touchmove", multiTouch, opts);
+    el.addEventListener("wheel", wheel, opts);
+    return () => {
+      for (const t of ["gesturestart", "gesturechange", "gestureend"]) el.removeEventListener(t, block);
+      el.removeEventListener("touchmove", multiTouch);
+      el.removeEventListener("wheel", wheel);
+    };
+  }, [applyView, aspect]);
 
   const marks = useMemo(() => job?.marks.filter((m) => m.sheetId === sheet.id) ?? [], [job, sheet.id]);
   if (!job) return null;
-  const width = baseWidth * zoom;
-  const height = (width * sheet.heightPt) / sheet.widthPt;
+  const baseWidth = size.w;
+  const width = baseWidth * view.z;
+  const height = width * aspect;
   const selectedMark = marks.find((m) => m.id === selected) ?? null;
+  const step = activeStep(view.z);
 
   function addMark(kind: Mark["kind"], points: Point[]) {
     const mark: Mark = {
@@ -85,22 +170,84 @@ function SheetView({ sheet }: { sheet: Sheet }) {
     };
     dispatch({ type: "add-mark", mark });
     setSelected(mark.id);
+    return mark.id;
   }
 
-  function onTap(e: React.PointerEvent<SVGSVGElement>) {
-    if (tool === "view") return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const pt: Point = [
-      Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
-      Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
-    ];
-    if (tool === "box") {
+  /** A tap at viewer pixel `p`; returns how to take it back if it turns out to be half a double-tap. */
+  function onTap(p: Point, target: Element | null): (() => void) | undefined {
+    const pt = viewerToPage(viewRef.current, baseWidth, baseWidth * aspect, p[0], p[1]);
+    if (tool === "view") {
+      const id = target?.closest("[data-mark-id]")?.getAttribute("data-mark-id");
+      if (id) setSelected(id);
+    } else if (tool === "box") {
+      const prev = sheet.workBoxAt ?? DEFAULT_WORK_BOX;
       dispatch({ type: "work-box", sheetId: sheet.id, at: pt });
       setTool("view");
+      return () => { dispatch({ type: "work-box", sheetId: sheet.id, at: prev }); setTool("box"); };
     } else if (tool === "spot") {
-      addMark("spot", [pt]);
+      const id = addMark("spot", [pt]);
       setTool("view");
-    } else setDraft((d) => [...d, pt]);
+      return () => { dispatch({ type: "delete-mark", id }); setSelected(null); setTool("spot"); };
+    } else {
+      setDraft((d) => [...d, pt]);
+      return () => setDraft((d) => d.slice(0, -1));
+    }
+  }
+
+  function tapped(p: Point, target: Element | null) {
+    const now = Date.now();
+    const last = lastTap.current;
+    if (last && now - last.t < DOUBLE_TAP_MS && dist(last.p, p) < 30) {
+      last.undo?.();
+      lastTap.current = null;
+      applyView({ z: 1, tx: 0, ty: 0 });
+      return;
+    }
+    lastTap.current = { t: now, p, undo: onTap(p, target) };
+  }
+
+  const local = (e: React.PointerEvent): Point => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return [e.clientX - r.left - e.currentTarget.clientLeft, e.clientY - r.top - e.currentTarget.clientTop];
+  };
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const g = gesture.current;
+    if (g.pts.size >= 2) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    g.pts.set(e.pointerId, local(e));
+    const [a, b] = [...g.pts.values()];
+    if (g.pts.size === 1) {
+      Object.assign(g, { mode: "tap", start: viewRef.current, p0: a, target: e.target as Element });
+    } else {
+      Object.assign(g, { mode: "pinch", start: viewRef.current, m0: mid(a, b), d0: dist(a, b) });
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const g = gesture.current;
+    if (!g.pts.has(e.pointerId)) return;
+    const p = local(e);
+    g.pts.set(e.pointerId, p);
+    if (g.mode === "pinch" && g.pts.size >= 2) {
+      const [a, b] = [...g.pts.values()];
+      applyView(pinchView(g.start, g.m0, g.d0, mid(a, b), dist(a, b)));
+    } else if (g.mode === "tap" && dist(p, g.p0) > TAP_SLOP) {
+      g.mode = tool === "view" ? "pan" : "drag";
+    }
+    if (g.mode === "pan") applyView({ ...g.start, tx: g.start.tx + p[0] - g.p0[0], ty: g.start.ty + p[1] - g.p0[1] });
+  }
+
+  function onPointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const g = gesture.current;
+    if (!g.pts.delete(e.pointerId)) return;
+    if (g.pts.size) {
+      g.mode = "done"; // one finger of a pinch lifted: wait for the other
+      return;
+    }
+    if (g.mode === "tap" && e.type === "pointerup") tapped(local(e), g.target);
+    g.mode = "none";
   }
 
   function finishRun() {
@@ -125,8 +272,13 @@ function SheetView({ sheet }: { sheet: Sheet }) {
           <span className="inline-block h-3 w-4 rounded-sm bg-blue-600" /> Box
         </ToolButton>
         <div className="ml-auto flex items-center gap-1">
-          {[1, 1.5, 2, 3].map((z) => (
-            <button key={z} onClick={() => setZoom(z)} className={`btn min-h-9 px-2 ${zoom === z ? "bg-slate-200" : ""}`}>
+          {ZOOM_STEPS.map((z) => (
+            <button
+              key={z}
+              onClick={() => applyView(zoomAt(viewRef.current, z, size.w / 2, size.h / 2))}
+              className={`btn min-h-9 px-2 ${step === z ? "bg-slate-200" : ""}`}
+              aria-pressed={step === z}
+            >
               {z}×
             </button>
           ))}
@@ -142,59 +294,66 @@ function SheetView({ sheet }: { sheet: Sheet }) {
         {tool === "box" && <p className="w-full text-sm text-slate-600">Tap an empty spot for the top-left corner of the WORK PERFORMED box.</p>}
       </div>
 
-      <div ref={wrapRef} className="w-full">
-        <div className="overflow-auto rounded-xl border border-slate-300 bg-white" style={{ maxHeight: "70dvh" }}>
-          <div className="relative" style={{ width, height }}>
-            {job.pdfBytes && baseWidth > 0 && <PdfPageCanvas bytes={job.pdfBytes} pageIndex={sheet.pageIndex} width={width} />}
-            <svg
-              className={`absolute inset-0 ${tool === "view" ? "" : "cursor-crosshair"}`}
-              width={width}
-              height={height}
-              onPointerUp={onTap}
-              style={{ touchAction: tool === "view" ? "auto" : "pinch-zoom" }}
-            >
-              {marks.map((m) =>
-                m.kind === "run" ? (
-                  <polyline
-                    key={m.id}
-                    points={m.points.map(toPx).join(" ")}
-                    fill="none"
-                    stroke={RUN_STROKE}
-                    strokeWidth={selected === m.id ? 18 : 12}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    onPointerUp={(e) => { if (tool === "view") { e.stopPropagation(); setSelected(m.id); } }}
-                  />
-                ) : (
-                  <circle
-                    key={m.id}
-                    cx={m.points[0][0] * width}
-                    cy={m.points[0][1] * height}
-                    r={selected === m.id ? 13 : 9}
-                    fill={SPOT_FILL}
-                    stroke={selected === m.id ? "#0f172a" : "white"}
-                    strokeWidth={2}
-                    onPointerUp={(e) => { if (tool === "view") { e.stopPropagation(); setSelected(m.id); } }}
-                  />
-                ),
-              )}
-              {(() => {
-                const at = sheet.workBoxAt ?? DEFAULT_WORK_BOX;
-                const rows = result ? workPerformed(result, sheet.id).length : 0;
-                const bw = (200 / sheet.widthPt) * width;
-                const bh = ((22 + (Math.max(1, rows) + 1) * 17) / sheet.heightPt) * height;
-                return (
-                  <g pointerEvents="none">
-                    <rect x={at[0] * width} y={at[1] * height} width={bw} height={bh} fill="rgba(37,99,235,0.08)" stroke="#2563eb" strokeDasharray="5 4" strokeWidth={1.5} />
-                    <text x={at[0] * width + 4} y={at[1] * height + 12} fontSize={10} fill="#2563eb" fontWeight={700}>WORK PERFORMED</text>
-                  </g>
-                );
-              })()}
-              {draft.length > 0 && (
-                <polyline points={draft.map(toPx).join(" ")} fill="none" stroke={RUN_STROKE} strokeWidth={10} strokeDasharray="6 6" />
-              )}
-            </svg>
-          </div>
+      <div
+        ref={viewerRef}
+        data-testid="sheet-viewer"
+        className={`relative w-full select-none overflow-hidden rounded-xl border border-slate-300 bg-white ${tool === "view" ? "cursor-grab" : "cursor-crosshair"}`}
+        style={{ height: size.w ? size.w * aspect : "50dvh", maxHeight: "70dvh", touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onDoubleClick={(e) => e.preventDefault()}
+      >
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{ width, height, transform: `translate3d(${view.tx}px, ${view.ty}px, 0)` }}
+        >
+          {job.pdfBytes && baseWidth > 0 && (
+            <PdfPageCanvas bytes={job.pdfBytes} pageIndex={sheet.pageIndex} width={width} renderWidth={baseWidth * renderZoom} />
+          )}
+          <svg className="absolute inset-0" width={width} height={height}>
+            {marks.map((m) =>
+              m.kind === "run" ? (
+                <polyline
+                  key={m.id}
+                  data-mark-id={m.id}
+                  points={m.points.map(toPx).join(" ")}
+                  fill="none"
+                  stroke={RUN_STROKE}
+                  strokeWidth={selected === m.id ? 18 : 12}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ) : (
+                <circle
+                  key={m.id}
+                  data-mark-id={m.id}
+                  cx={m.points[0][0] * width}
+                  cy={m.points[0][1] * height}
+                  r={selected === m.id ? 13 : 9}
+                  fill={SPOT_FILL}
+                  stroke={selected === m.id ? "#0f172a" : "white"}
+                  strokeWidth={2}
+                />
+              ),
+            )}
+            {(() => {
+              const at = sheet.workBoxAt ?? DEFAULT_WORK_BOX;
+              const rows = result ? workPerformed(result, sheet.id).length : 0;
+              const bw = (200 / sheet.widthPt) * width;
+              const bh = ((22 + (Math.max(1, rows) + 1) * 17) / sheet.heightPt) * height;
+              return (
+                <g pointerEvents="none" data-testid="work-box">
+                  <rect x={at[0] * width} y={at[1] * height} width={bw} height={bh} fill="rgba(37,99,235,0.08)" stroke="#2563eb" strokeDasharray="5 4" strokeWidth={1.5} />
+                  <text x={at[0] * width + 4} y={at[1] * height + 12} fontSize={10} fill="#2563eb" fontWeight={700}>WORK PERFORMED</text>
+                </g>
+              );
+            })()}
+            {draft.length > 0 && (
+              <polyline points={draft.map(toPx).join(" ")} fill="none" stroke={RUN_STROKE} strokeWidth={10} strokeDasharray="6 6" />
+            )}
+          </svg>
         </div>
       </div>
 
