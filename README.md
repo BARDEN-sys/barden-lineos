@@ -56,6 +56,11 @@ npm run build
   - "Put on sheet" turns a PPX run into a run mark on that sheet under a FOOTAGE code, so the
     normal allocation engine (and the never-over-master rule) bills it. The mark keeps the line
     and callouts, and syncs with the crew like any mark.
+  - **Place on print:** a run put on a sheet first sits mid-page (dashed, "not placed on print").
+    Tap 📍 Place on print (Map tab or the run's mark on Sheets), then tap where the run starts and
+    where it ends on the print: the Google Earth shape is fitted between the two taps (turned and
+    scaled, never mirrored). Tap three or more points to trace it instead. The billed footage stays
+    the printed callout total; the callout on the clean sheet sits on the placed line.
   - "Export marked runs (.kml)" writes the job's runs that are on sheets back out for Google Earth:
     one pink Placemark per run named "WO <number> · <run>", with the callout / feet table, sheet and code.
   - Test file: `tests/fixtures/WO-4222528.kml` is the real WO 4222528 export: PPX 894 / 824 / 874 / 624

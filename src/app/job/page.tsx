@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { AllocationTab } from "@/components/AllocationTab";
 import { DailyTab } from "@/components/DailyTab";
 import { ExportTab } from "@/components/ExportTab";
@@ -25,6 +25,13 @@ type TabId = (typeof TABS)[number]["id"];
 export default function JobPage() {
   const { job, result, restoring, saveState, saveError, online, syncStatus, syncNotes, dismissSyncNotes, syncNow, isForeman } = useJob();
   const [tab, setTab] = useState<TabId>("sheets");
+  // A Google Earth run to place on the print, handed from the Map tab to the Sheets tab.
+  const [placeMarkId, setPlaceMarkId] = useState<string | null>(null);
+  const placeOnPrint = useCallback((markId: string) => {
+    setPlaceMarkId(markId);
+    setTab("sheets");
+  }, []);
+  const placeTaken = useCallback(() => setPlaceMarkId(null), []);
 
   if (!job && restoring) {
     return <main className="mx-auto max-w-lg px-4 py-10 text-slate-600">Opening your project…</main>;
@@ -123,8 +130,8 @@ export default function JobPage() {
         </p>
       )}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-4 pb-24 sm:pb-8">
-        {tab === "sheets" && <SheetsTab />}
-        {tab === "map" && <MapTab />}
+        {tab === "sheets" && <SheetsTab placeMarkId={placeMarkId} onPlaceTaken={placeTaken} />}
+        {tab === "map" && <MapTab onPlace={placeOnPrint} />}
         {tab === "master" && <MasterTab />}
         {tab === "glossary" && <GlossaryTab />}
         {tab === "allocation" && <AllocationTab />}

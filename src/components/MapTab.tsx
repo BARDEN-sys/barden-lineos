@@ -18,7 +18,8 @@ const COLOR: Record<RunGroup, string> = { PPX: "#ec4899", PPR: "#94a3b8", OTHER:
 const fmt = (n: number) => n.toLocaleString("en-US");
 
 /** Google Earth runs: import .kml/.kmz, see them on the map, assign PPX runs to sheets, export. */
-export function MapTab() {
+/** `onPlace`: open the run's sheet to tap where it goes on the print. */
+export function MapTab({ onPlace }: { onPlace?: (markId: string) => void } = {}) {
   const { job, result, dispatch } = useJob();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -124,7 +125,7 @@ export function MapTab() {
               {g === "PPR" && <span className="ml-2 text-sm font-normal text-slate-500">reference only — not billed</span>}
             </h3>
             {list.map((r) => (
-              <RunRow key={r.id} run={r} selected={selected === r.id} onSelect={() => setSelected(r.id)} />
+              <RunRow key={r.id} run={r} selected={selected === r.id} onSelect={() => setSelected(r.id)} onPlace={onPlace} />
             ))}
           </section>
         );
@@ -145,7 +146,7 @@ function Stat({ label, value, strong, warn }: { label: string; value: string; st
   );
 }
 
-function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; onSelect: () => void }) {
+function RunRow({ run, selected, onSelect, onPlace }: { run: KmlRun; selected: boolean; onSelect: () => void; onPlace?: (markId: string) => void }) {
   const { job, dispatch } = useJob();
   // Run footage only bills under FOOTAGE codes (never pairs / each).
   const codes = job!.master.filter((m) => job!.glossary.find((g) => g.code === m.code)?.unitType === "FOOTAGE");
@@ -212,6 +213,12 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
               <span className="chip border-emerald-300 bg-emerald-50 text-emerald-800">
                 On sheet {sheetLabel(mark.sheetId)} · {mark.items.map((i) => `${i.code} ${fmt(i.qty)}`).join(", ")}
               </span>
+              {onPlace && (
+                <button className={`${mark.geo?.placed ? "btn-ghost" : "btn-primary"} min-h-9`} onClick={() => onPlace(mark.id)}>
+                  📍 {mark.geo?.placed ? "Move on print" : "Place on print"}
+                </button>
+              )}
+              {!mark.geo?.placed && <span className="text-amber-800">not placed on the print yet</span>}
               <button className="btn-ghost min-h-9" onClick={() => dispatch({ type: "delete-mark", id: mark.id })}>Take off sheet</button>
             </>
           ) : (
@@ -266,7 +273,7 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
     let map: LeafletMap | null = null;
     import("leaflet").then((L) => {
       if (cancelled || !divRef.current) return;
-      map = L.map(divRef.current, { maxZoom: 20 }).setView({ lat: 27.95, lng: -82.46 }, 15);
+      map = L.map(divRef.current, { maxZoom: 20, zoomAnimation: false }).setView({ lat: 27.95, lng: -82.46 }, 15);
       L.tileLayer(SATELLITE, { maxZoom: 20, maxNativeZoom: 19, attribution: SAT_CREDIT }).addTo(map);
       L.tileLayer(SAT_LABELS, { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
@@ -283,7 +290,8 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
   useEffect(() => {
     if (!ready) return;
     void import("leaflet").then((L) => {
-      const layer = layerRef.current!;
+      const layer = layerRef.current;
+      if (!layer || !mapRef.current) return;
       layer.clearLayers();
       const all: L.LatLngExpression[] = [];
       for (const r of runs) {
@@ -319,8 +327,9 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
       const key = runs.map((r) => r.id).join();
       if (all.length && fitted.current !== key) {
         fitted.current = key;
+        // No animation: leaving the tab mid-zoom would crash Leaflet (_leaflet_pos).
         const labels = runs.filter((r) => !r.lines.length).length;
-        mapRef.current?.fitBounds(L.latLngBounds(all), { paddingTopLeft: [24, 24 + labels * 30], paddingBottomRight: [24, 24], maxZoom: 19 });
+        mapRef.current?.fitBounds(L.latLngBounds(all), { paddingTopLeft: [24, 24 + labels * 30], paddingBottomRight: [24, 24], maxZoom: 19, animate: false });
       }
     });
   }, [runs, selected, ready, onSelect]);

@@ -361,6 +361,43 @@ export function pagePoints(lines: [number, number][][]): Point[] {
 }
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
+/**
+ * Fits the run's Google Earth shape onto the print between two taps: the run's first point
+ * lands on `a`, its last on `b` (turned and scaled to match, never mirrored). Worked in page
+ * points so the shape keeps its proportions on a non-square page. Null when the run starts
+ * and ends at the same place (a loop has no direction to fit); trace it instead.
+ */
+export function fitShape(lines: [number, number][][], a: Point, b: Point, widthPt: number, heightPt: number): Point[] | null {
+  const all = lines.flat();
+  if (all.length < 2) return null;
+  const lat0 = all.reduce((s, p) => s + p[1], 0) / all.length;
+  const kx = Math.cos((lat0 * Math.PI) / 180);
+  // Geo as a flat plane with y down, like the page.
+  const g = all.map(([lng, lat]) => [lng * kx, -lat] as const);
+  const [g0, gN] = [g[0], g[g.length - 1]];
+  const gd = [gN[0] - g0[0], gN[1] - g0[1]];
+  const gLen2 = gd[0] ** 2 + gd[1] ** 2;
+  const A = [a[0] * widthPt, a[1] * heightPt];
+  const B = [b[0] * widthPt, b[1] * heightPt];
+  const pd = [B[0] - A[0], B[1] - A[1]];
+  if (gLen2 === 0 || (pd[0] === 0 && pd[1] === 0)) return null;
+  // Complex ratio (B - A) / (gN - g0): rotation + scale.
+  const re = (pd[0] * gd[0] + pd[1] * gd[1]) / gLen2;
+  const im = (pd[1] * gd[0] - pd[0] * gd[1]) / gLen2;
+  return g.map(([x, y]): Point => {
+    const dx = x - g0[0];
+    const dy = y - g0[1];
+    return [clamp01((A[0] + dx * re - dy * im) / widthPt), clamp01((A[1] + dx * im + dy * re) / heightPt)];
+  });
+}
+
+/** New page points for a Google Earth run from the crew's taps on the print. */
+export function placeRun(mark: Mark, taps: Point[], widthPt: number, heightPt: number): Mark {
+  if (!mark.geo || taps.length < 2) return mark;
+  const points = (taps.length === 2 && fitShape(mark.geo.lines, taps[0], taps[1], widthPt, heightPt)) || taps;
+  return { ...mark, points, geo: { ...mark.geo, placed: true } };
+}
+
 /** The run mark that bills a KML run's printed footage under `code` on `sheetId`. */
 export function runMark(run: KmlRun, sheetId: string, code: string, user: string, id: string): Mark {
   return {

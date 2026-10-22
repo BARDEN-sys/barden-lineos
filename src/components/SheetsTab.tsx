@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { workPerformed } from "@/lib/allocation";
 import { downscalePhoto } from "@/lib/image";
 import { newId } from "@/lib/job";
+import { placeRun } from "@/lib/kml";
 import { parseSpokenCodes } from "@/lib/voice";
 import { DEFAULT_WORK_BOX } from "@/lib/output";
 import { currentUser } from "@/lib/user";
@@ -15,14 +16,26 @@ import { VoiceButton } from "./VoiceButton";
 import { useJob } from "./JobProvider";
 import { PdfPageCanvas } from "./PdfPageCanvas";
 
-type Tool = "view" | "run" | "spot" | "box";
+type Tool = "view" | "run" | "spot" | "box" | "place";
 
 const RUN_STROKE = "rgba(250, 204, 21, 0.7)"; // yellow highlighter
 const SPOT_FILL = "rgba(236, 72, 153, 0.75)"; // pink removal spot
 
-export function SheetsTab() {
+/** `placeMarkId`: a Google Earth run to put on the print (from the Map tab); `onPlaceTaken` clears it. */
+export function SheetsTab({ placeMarkId = null, onPlaceTaken }: { placeMarkId?: string | null; onPlaceTaken?: () => void } = {}) {
   const { job, result } = useJob();
   const [sheetIdx, setSheetIdx] = useState(0);
+  const [placing, setPlacing] = useState<string | null>(null);
+  // Open the run's sheet and start placing it.
+  useEffect(() => {
+    if (!placeMarkId || !job) return;
+    const i = job.sheets.findIndex((s) => s.id === job.marks.find((m) => m.id === placeMarkId)?.sheetId);
+    if (i >= 0) {
+      setSheetIdx(i);
+      setPlacing(placeMarkId);
+    }
+    onPlaceTaken?.();
+  }, [placeMarkId, job, onPlaceTaken]);
   if (!job) return null;
   const sheet = job.sheets[Math.min(sheetIdx, job.sheets.length - 1)];
 
@@ -44,7 +57,7 @@ export function SheetsTab() {
           );
         })}
       </nav>
-      {sheet && <SheetView key={sheet.id} sheet={sheet} />}
+      {sheet && <SheetView key={sheet.id} sheet={sheet} placeMarkId={placing} onPlaceStarted={() => setPlacing(null)} />}
     </div>
   );
 }
@@ -67,11 +80,24 @@ const RENDER_DEBOUNCE_MS = 250;
 const mid = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-function SheetView({ sheet }: { sheet: Sheet }) {
+function SheetView({ sheet, placeMarkId, onPlaceStarted }: { sheet: Sheet; placeMarkId: string | null; onPlaceStarted: () => void }) {
   const { job, result, dispatch } = useJob();
   const [tool, setTool] = useState<Tool>("view");
   const [draft, setDraft] = useState<Point[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  /** The Google Earth run being put on the print (tool "place"). */
+  const [placingId, setPlacingId] = useState<string | null>(null);
+  const startPlacing = useCallback((id: string) => {
+    setPlacingId(id);
+    setDraft([]);
+    setSelected(null);
+    setTool("place");
+  }, []);
+  useEffect(() => {
+    if (!placeMarkId) return;
+    startPlacing(placeMarkId);
+    onPlaceStarted();
+  }, [placeMarkId, startPlacing, onPlaceStarted]);
   const viewerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 }); // viewer box
   const sizeRef = useRef(size);
@@ -250,6 +276,17 @@ function SheetView({ sheet }: { sheet: Sheet }) {
     g.mode = "none";
   }
 
+  const placingMark = marks.find((m) => m.id === placingId) ?? null;
+  function finishPlace() {
+    if (placingMark && draft.length >= 2) {
+      dispatch({ type: "update-mark", mark: placeRun(placingMark, draft, sheet.widthPt, sheet.heightPt) });
+      setSelected(placingMark.id);
+    }
+    setDraft([]);
+    setPlacingId(null);
+    setTool("view");
+  }
+
   function finishRun() {
     if (draft.length >= 2) addMark("run", draft);
     setDraft([]);
@@ -261,7 +298,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="card flex flex-wrap items-center gap-2 p-3">
-        <ToolButton active={tool === "view"} onClick={() => { setTool("view"); setDraft([]); }}>Select</ToolButton>
+        <ToolButton active={tool === "view"} onClick={() => { setTool("view"); setDraft([]); setPlacingId(null); }}>Select</ToolButton>
         <ToolButton active={tool === "run"} onClick={() => { setTool("run"); setDraft([]); setSelected(null); }}>
           <span className="inline-block h-2 w-5 rounded" style={{ background: RUN_STROKE }} /> Run
         </ToolButton>
@@ -288,6 +325,17 @@ function SheetView({ sheet }: { sheet: Sheet }) {
             <span className="text-slate-600">Tap along the highlighted run ({draft.length} points).</span>
             <button className="btn-ghost ml-auto" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo</button>
             <button className="btn-primary" onClick={finishRun} disabled={draft.length < 2}>Finish run</button>
+          </div>
+        )}
+        {tool === "place" && placingMark && (
+          <div className="flex w-full flex-wrap items-center gap-2 text-sm">
+            <span className="text-slate-600">
+              📍 <b>{placingMark.geo?.name ?? "Run"}</b>: tap where the run <b>starts</b> on the print, then where it <b>ends</b> — its Google Earth shape is
+              fitted between them. Tap more points to trace it instead ({draft.length} {draft.length === 1 ? "point" : "points"}).
+            </span>
+            <button className="btn-ghost ml-auto" onClick={() => setDraft((d) => d.slice(0, -1))} disabled={!draft.length}>Undo</button>
+            <button className="btn-ghost" onClick={() => { setDraft([]); setPlacingId(null); setTool("view"); }}>Cancel</button>
+            <button className="btn-primary" onClick={finishPlace} disabled={draft.length < 2}>Place run</button>
           </div>
         )}
         {tool === "spot" && <p className="w-full text-sm text-slate-600">Tap the cut / splice / removal location.</p>}
@@ -324,6 +372,8 @@ function SheetView({ sheet }: { sheet: Sheet }) {
                   strokeWidth={selected === m.id ? 18 : 12}
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  strokeDasharray={m.geo && !m.geo.placed ? "14 12" : undefined}
+                  opacity={m.id === placingId ? 0.25 : 1}
                 />
               ) : (
                 <circle
@@ -351,8 +401,18 @@ function SheetView({ sheet }: { sheet: Sheet }) {
               );
             })()}
             {draft.length > 0 && (
-              <polyline points={draft.map(toPx).join(" ")} fill="none" stroke={RUN_STROKE} strokeWidth={10} strokeDasharray="6 6" />
+              <polyline
+                points={(tool === "place" && placingMark ? placeRun(placingMark, draft, sheet.widthPt, sheet.heightPt).points : draft).map(toPx).join(" ")}
+                fill="none"
+                stroke={RUN_STROKE}
+                strokeWidth={10}
+                strokeDasharray="6 6"
+              />
             )}
+            {tool === "place" &&
+              draft.map((p, i) => (
+                <circle key={i} cx={p[0] * width} cy={p[1] * height} r={7} fill={i === 0 ? "#16a34a" : "#0f172a"} stroke="white" strokeWidth={2} pointerEvents="none" />
+              ))}
           </svg>
         </div>
       </div>
@@ -360,7 +420,7 @@ function SheetView({ sheet }: { sheet: Sheet }) {
       <SheetPhotos sheet={sheet} />
       <SheetTaskCodes sheet={sheet} />
       {selectedMark ? (
-        <MarkEditor key={selectedMark.id} mark={selectedMark} sheet={sheet} onClose={() => setSelected(null)} />
+        <MarkEditor key={selectedMark.id} mark={selectedMark} sheet={sheet} onClose={() => setSelected(null)} onPlace={() => startPlacing(selectedMark.id)} />
       ) : (
         <MarkList marks={marks} onPick={setSelected} />
       )}
@@ -390,6 +450,7 @@ function MarkList({ marks, onPick }: { marks: Mark[]; onPick: (id: string) => vo
             <span className="flex-1 text-sm">
               <span className="font-semibold">{m.kind === "run" ? `Run ${m.lengthFt ?? "?"}′` : "Spot"}</span>
               {m.items.length > 0 && <span className="text-slate-600"> · {m.items.map((i) => `${i.code} ${i.qty}`).join(", ")}</span>}
+              {m.geo && !m.geo.placed && <span className="chip ml-2 border-amber-300 bg-amber-50 text-amber-800">not placed on print</span>}
               {m.note && <span className="block text-xs text-slate-500">{m.note}</span>}
             </span>
             <span className="text-xs text-slate-400">{m.createdBy}</span>
@@ -400,7 +461,7 @@ function MarkList({ marks, onPick }: { marks: Mark[]; onPick: (id: string) => vo
   );
 }
 
-function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClose: () => void }) {
+function MarkEditor({ mark, sheet, onClose, onPlace }: { mark: Mark; sheet: Sheet; onClose: () => void; onPlace: () => void }) {
   const { job, dispatch } = useJob();
   const [m, setM] = useState<Mark>(mark);
   const [measuring, setMeasuring] = useState(false);
@@ -427,7 +488,17 @@ function MarkEditor({ mark, sheet, onClose }: { mark: Mark; sheet: Sheet; onClos
         <button className="btn-ghost ml-auto min-h-9" onClick={onClose}>Done</button>
       </div>
 
-      {m.kind === "run" && (
+      {m.geo && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-pink-50 p-2 text-sm">
+          <span className="flex-1">
+            Google Earth run <b>{m.geo.name}</b> · {m.geo.printedFt.toLocaleString("en-US")} ft printed
+            {!m.geo.placed && <span className="block text-amber-800">Not placed yet — it sits mid-page until you place it.</span>}
+          </span>
+          <button className="btn-primary min-h-9" onClick={onPlace}>📍 {m.geo.placed ? "Move on print" : "Place on print"}</button>
+        </div>
+      )}
+
+      {m.kind === "run" && !m.geo && (
         <label className="flex flex-col gap-1 text-sm">
           Length (ft)
           <input

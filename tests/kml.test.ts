@@ -3,7 +3,7 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { allocate } from "@/lib/allocation";
-import { canAssign, exportKml, importRuns, isMismatch, kmlText, mergeRuns, parseCallouts, parseKml, runMark, runName, runTotals } from "@/lib/kml";
+import { canAssign, exportKml, fitShape, importRuns, isMismatch, kmlText, mergeRuns, parseCallouts, parseKml, placeRun, runMark, runName, runTotals } from "@/lib/kml";
 import type { Job, KmlRun } from "@/lib/types";
 
 // The real WO 4222528 Google Earth file. Its plan-image overlays (files/plan_1.jpg…) are not included.
@@ -239,5 +239,43 @@ describe("folder-level callout table (PPR with no lines)", () => {
     const j = job();
     const [table] = importRuns(j, [{ ...runs[1], group: "OTHER" }], "wo.kml", "t", id);
     expect(canAssign(j, table, "P10F").ok).toBe(false);
+  });
+});
+
+describe("placing a run on the print", () => {
+  const W = 792;
+  const H = 612;
+  const near = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 6));
+
+  it("fits the Google Earth shape between the start and end taps", () => {
+    // East 100 m then north 100 m (an L), placed with start at left, end at upper right.
+    const L: [number, number][][] = [[[-82.46, 27.95], [-82.459, 27.95], [-82.459, 27.951]]];
+    const pts = fitShape(L, [0.2, 0.6], [0.4, 0.2], W, H)!;
+    expect(pts).toHaveLength(3);
+    near(pts[0], [0.2, 0.6]);
+    near(pts[2], [0.4, 0.2]);
+    // The corner keeps a right angle on the page (in page points, not 0..1 units).
+    const v1 = [(pts[1][0] - pts[0][0]) * W, (pts[1][1] - pts[0][1]) * H];
+    const v2 = [(pts[2][0] - pts[1][0]) * W, (pts[2][1] - pts[1][1]) * H];
+    expect(Math.abs(v1[0] * v2[0] + v1[1] * v2[1]) / (Math.hypot(...v1) * Math.hypot(...v2))).toBeLessThan(0.01);
+    // Not mirrored: north-after-east is a left turn (counter-clockwise, y down) on the page too.
+    expect(v1[0] * v2[1] - v1[1] * v2[0]).toBeLessThan(0);
+  });
+
+  it("cannot fit a loop; returns null", () => {
+    expect(fitShape([[[-82.46, 27.95], [-82.459, 27.95], [-82.46, 27.95]]], [0.1, 0.1], [0.5, 0.5], W, H)).toBeNull();
+  });
+
+  it("two taps fit the shape, more taps trace; marks it placed; footage unchanged", () => {
+    const j = job();
+    const m = runMark(j.kmlRuns![0], "s1", "P10F", "t", "mark-x");
+    expect(m.geo!.placed).toBeUndefined();
+    const fitted = placeRun(m, [[0.1, 0.5], [0.3, 0.3]], W, H);
+    expect(fitted.points).toHaveLength(m.geo!.lines.flat().length);
+    expect(fitted.geo!.placed).toBe(true);
+    expect(fitted.items).toEqual([{ code: "P10F", qty: 894 }]);
+    const traced = placeRun(m, [[0.1, 0.5], [0.2, 0.5], [0.2, 0.3], [0.25, 0.3]], W, H);
+    expect(traced.points).toEqual([[0.1, 0.5], [0.2, 0.5], [0.2, 0.3], [0.25, 0.3]]);
+    expect(placeRun(m, [[0.1, 0.5]], W, H)).toBe(m);
   });
 });

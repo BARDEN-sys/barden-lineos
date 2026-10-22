@@ -62,6 +62,8 @@ export const MarkGeo = z.object({
   printedFt: z.number().nonnegative(),
   /** Length of the line on the map: cross-check only. */
   mapFt: z.number().nonnegative(),
+  /** The crew has put the run where it is on the print (until then it sits mid-page). */
+  placed: z.boolean().optional(),
 });
 export type MarkGeo = z.infer<typeof MarkGeo>;
 
