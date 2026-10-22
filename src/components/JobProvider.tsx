@@ -6,7 +6,7 @@ import { downloadJob, OfflineError, shareJob, syncJob, watchJob, type Crew } fro
 import { currentJobId, getSyncState, loadJob, requestPersistence, saveJob, setSyncState, storageAvailable } from "@/lib/storage";
 import { useAuth } from "./AuthProvider";
 import { currentUser } from "@/lib/user";
-import { type Point, type Photo, type DailyEntry, type GlossaryEntry, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
+import { type Point, type Photo, type DailyEntry, type GlossaryEntry, type KmlRun, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
 // The open job lives in memory and is saved to the phone (IndexedDB) after every change,
 // so it works with no signal and survives closing the app. M4 adds upload to Supabase
@@ -29,7 +29,9 @@ type Action =
   | { type: "sheet-task-code"; sheetId: string; unitCode: string; taskCode: string }
   | { type: "add-daily"; rows: DailyEntry[] }
   | { type: "update-daily"; row: DailyEntry }
-  | { type: "delete-daily"; id: string };
+  | { type: "delete-daily"; id: string }
+  | { type: "add-kml-runs"; runs: KmlRun[] }
+  | { type: "delete-kml-runs"; ids: string[] };
 
 function reducer(job: Job | null, a: Action): Job | null {
   if (a.type === "set-job") return a.job;
@@ -87,6 +89,10 @@ function reducer(job: Job | null, a: Action): Job | null {
       return { ...job, daily: job.daily.map((r) => (r.id === a.row.id ? { ...a.row, updatedBy: currentUser(), updatedAt: now } : r)) };
     case "delete-daily":
       return { ...job, daily: job.daily.filter((r) => r.id !== a.id) };
+    case "add-kml-runs":
+      return { ...job, kmlRuns: [...(job.kmlRuns ?? []), ...a.runs] };
+    case "delete-kml-runs":
+      return { ...job, kmlRuns: (job.kmlRuns ?? []).filter((r) => !a.ids.includes(r.id)) };
     case "clear-override":
       return { ...job, overrides: job.overrides.filter((o) => !(o.sheetId === a.sheetId && o.code === a.code)) };
   }

@@ -43,6 +43,28 @@ export type MarkItem = z.infer<typeof MarkItem>;
 export const MarkKind = z.enum(["run", "spot"]);
 export type MarkKind = z.infer<typeof MarkKind>;
 
+/** Google Earth folder group: PPX is billed work, PPR is reference only (never added to PPX). */
+export const RunGroup = z.enum(["PPX", "PPR", "OTHER"]);
+export type RunGroup = z.infer<typeof RunGroup>;
+
+const LngLat = z.tuple([z.number(), z.number()]);
+const KmlCallout = z.object({ label: z.string(), ft: z.number().nonnegative() });
+
+/** A run mark that came from a Google Earth Placemark (kept for KML export). */
+export const MarkGeo = z.object({
+  kmlRunId: z.string(),
+  name: z.string(),
+  group: RunGroup,
+  /** Line pieces as [lng, lat], like KML. */
+  lines: z.array(z.array(LngLat)),
+  callouts: z.array(KmlCallout),
+  /** Printed callout total: the footage billed. */
+  printedFt: z.number().nonnegative(),
+  /** Length of the line on the map: cross-check only. */
+  mapFt: z.number().nonnegative(),
+});
+export type MarkGeo = z.infer<typeof MarkGeo>;
+
 export const Mark = z.object({
   id: z.string(),
   jobId: z.string(),
@@ -54,6 +76,7 @@ export const Mark = z.object({
   pairCount: z.number().int().nonnegative().optional(),
   items: z.array(MarkItem),
   note: z.string().optional(),
+  geo: MarkGeo.optional(),
   createdBy: z.string(),
   createdAt: z.string(),
   updatedBy: z.string().optional(),
@@ -142,6 +165,26 @@ export const DailyEntry = z.object({
 });
 export type DailyEntry = z.infer<typeof DailyEntry>;
 
+/** One run read from an uploaded .kml / .kmz. */
+export const KmlRun = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  name: z.string(),
+  /** Folder path in Google Earth, e.g. "WO 4222528 / PPX". */
+  folder: z.string(),
+  group: RunGroup,
+  lines: z.array(z.array(LngLat)),
+  callouts: z.array(KmlCallout),
+  printedFt: z.number().nonnegative(),
+  mapFt: z.number().nonnegative(),
+  /** Map length differs from printed footage by more than 15%. */
+  mismatch: z.boolean(),
+  sourceFile: z.string(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+});
+export type KmlRun = z.infer<typeof KmlRun>;
+
 export type CrewRole = "foreman" | "crew";
 export type CloudLink = { crewId: string; role: CrewRole; crewName?: string };
 
@@ -157,6 +200,8 @@ export type Job = {
   overrides: Override[];
   photos: Photo[];
   daily: DailyEntry[];
+  /** Runs imported from Google Earth (.kml / .kmz). Older jobs have none. */
+  kmlRuns?: KmlRun[];
   /** Set once the project is shared with a crew (M4). Absent = only on this phone. */
   cloud?: CloudLink;
   createdBy: string;

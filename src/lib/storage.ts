@@ -118,6 +118,7 @@ export async function loadJob(id: string): Promise<Job | null> {
     // Records saved before a field existed get its default.
     daily: rest.daily ?? [],
     overrides: rest.overrides ?? [],
+    kmlRuns: rest.kmlRuns ?? [],
     pdfBytes: pdf ? new Uint8Array(pdf) : null,
     photos: metas.flatMap((m) => {
       const b = bytes.get(m.id);

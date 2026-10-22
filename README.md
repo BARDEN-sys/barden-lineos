@@ -39,6 +39,21 @@ npm run build
     all days; the daily report lists the rows and totals by task code.
   - **WORK PERFORMED box:** blue table like the crew's finished sheets; tap "Box" and then an
     empty spot on the map to place it. Code callouts are yellow tags with arrows.
+- **Google Earth runs (Map tab):** upload a `.kml` or `.kmz`; each Placemark LineString is a run
+  (`src/lib/kml.ts`).
+  - Footage for the codes is the **printed callout total** from the line's description table
+    (e.g. "PPX callout 2 = 116 ft", or an HTML Callout / Feet table with or without a Total row).
+    The line's length on the map is shown only as a cross-check; a run is flagged when the two
+    differ by more than 15%.
+  - Folders named PPX and PPR stay separate. PPR is reference only: it is totalled on its own,
+    never added to PPX, and cannot be put on a sheet.
+  - "Put on sheet" turns a PPX run into a run mark on that sheet under a FOOTAGE code, so the
+    normal allocation engine (and the never-over-master rule) bills it. The mark keeps the line
+    and callouts, and syncs with the crew like any mark.
+  - "Export marked runs (.kml)" writes the job's runs that are on sheets back out for Google Earth:
+    one pink Placemark per run named "WO <number> · <run>", with the callout / feet table, sheet and code.
+  - Test file: `tests/fixtures/wo-4222528-standin.kml` is a **stand-in** built to the WO 4222528
+    footages (PPX 894 / 824 / 874 / 624 = 3,216; PPR 1,329). Swap in the real export when available.
 - M2: photo of marked-up paper → detect highlights.
 - M3: map / GPS measuring (`GOOGLE_MAPS_API_KEY`).
 - **M4 (built):** crew logins and invites on LineOS's own Supabase project (see `supabase/`).

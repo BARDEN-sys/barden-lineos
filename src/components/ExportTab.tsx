@@ -8,7 +8,7 @@ import { currentUser } from "@/lib/user";
 import { Flags } from "./AllocationTab";
 import { useJob } from "./JobProvider";
 
-function download(data: Uint8Array | string, name: string, type: string) {
+export function download(data: Uint8Array | string, name: string, type: string) {
   const blob = new Blob([typeof data === "string" ? data : new Uint8Array(data)], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

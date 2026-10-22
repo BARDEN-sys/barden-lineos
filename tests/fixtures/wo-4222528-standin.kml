@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- STAND-IN for the WO 4222528 Google Earth file: synthetic geometry and run names
+     (except Sapphire / South Acacia), built to the footages given for the job.
+     Replace with the real export when available. -->
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Document>
+  <name>WO 4222528</name>
+  <Style id="yellow"><LineStyle><color>ff00ffff</color><width>4</width></LineStyle></Style>
+  <Folder>
+    <name>WO 4222528</name>
+    <Folder>
+      <name>PPX</name>
+      <Placemark>
+        <name>Sapphire</name>
+        <description><![CDATA[<table border="1"><tr><th>Callout</th><th>Feet</th></tr><tr><td>PPX callout 1</td><td>230</td></tr><tr><td>PPX callout 2</td><td>116</td></tr><tr><td>PPX callout 3</td><td>300</td></tr><tr><td>PPX callout 4</td><td>248</td></tr><tr><td><b>Total</b></td><td><b>894</b></td></tr></table>]]></description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9500000,0 -82.4581071,27.9500000,0 -82.4581071,27.9516721,0</coordinates></LineString>
+      </Placemark>
+      <Placemark>
+        <name>South Acacia</name>
+        <description><![CDATA[PPX callout 1 = 412 ft<br>PPX callout 2 = 250 ft<br>PPX callout 3 = 162 ft]]></description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9520000,0 -82.4584329,27.9520000,0 -82.4584329,27.9506157,0</coordinates></LineString>
+      </Placemark>
+      <Placemark>
+        <name>PPX Run 3</name>
+        <description><![CDATA[<table border="1"><tr><th>Callout</th><th>Feet</th></tr><tr><td>1</td><td>400'</td></tr><tr><td>2</td><td>474'</td></tr></table>]]></description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9540000,0 -82.4571916,27.9540000,0</coordinates></LineString>
+      </Placemark>
+      <Placemark>
+        <name>PPX Run 4</name>
+        <description>&lt;table border=&quot;1&quot;&gt;&lt;tr&gt;&lt;th&gt;Callout&lt;/th&gt;&lt;th&gt;Feet&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Callout 1&lt;/td&gt;&lt;td&gt;310 ft&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Callout 2&lt;/td&gt;&lt;td&gt;314 ft&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;b&gt;Total&lt;/b&gt;&lt;/td&gt;&lt;td&gt;&lt;b&gt;624 ft&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9560000,0 -82.4590070,27.9560000,0 -82.4583048,27.9566202,0</coordinates></LineString>
+      </Placemark>
+    </Folder>
+    <Folder>
+      <name>PPR</name>
+      <Placemark>
+        <name>PPR Reference A</name>
+        <description><![CDATA[<table border="1"><tr><th>Callout</th><th>Feet</th></tr><tr><td>PPR callout 1</td><td>729</td></tr><tr><td><b>Total</b></td><td><b>729</b></td></tr></table>]]></description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9480000,0 -82.4577193,27.9480000,0</coordinates></LineString>
+      </Placemark>
+      <Placemark>
+        <name>PPR Reference B</name>
+        <description><![CDATA[<table border="1"><tr><th>Callout</th><th>Feet</th></tr><tr><td>PPR callout 1</td><td>350</td></tr><tr><td>PPR callout 2</td><td>250</td></tr><tr><td><b>Total</b></td><td><b>600</b></td></tr></table>]]></description>
+        <styleUrl>#yellow</styleUrl>
+        <LineString><tessellate>1</tessellate><coordinates>-82.4600000,27.9460000,0 -82.4581072,27.9460000,0</coordinates></LineString>
+      </Placemark>
+    </Folder>
+  </Folder>
+</Document>
+</kml>
