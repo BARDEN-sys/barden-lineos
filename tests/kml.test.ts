@@ -3,15 +3,15 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { allocate } from "@/lib/allocation";
-import { canAssign, exportKml, importRuns, isMismatch, kmlText, parseCallouts, parseKml, runMark, runTotals } from "@/lib/kml";
+import { canAssign, exportKml, importRuns, isMismatch, kmlText, parseCallouts, parseKml, runMark, runName, runTotals } from "@/lib/kml";
 import type { Job, KmlRun } from "@/lib/types";
 
 // The real WO 4222528 Google Earth file. Its plan-image overlays (files/plan_1.jpg…) are not included.
 const KML = readFileSync(path.join(__dirname, "fixtures/WO-4222528.kml"), "utf8");
-const SAPPHIRE = "Sapphire / north Acacia rear span — 894 ft";
-const SOUTH_ACACIA = "South Acacia rear span — 824 ft";
-const BAY_SHORE = "Bay Shore corridor to 47th St — 874 ft";
-const EAST_REAR = "East rear span along Bay Shore — 624 ft";
+const SAPPHIRE = "Sapphire / north Acacia rear span";
+const SOUTH_ACACIA = "South Acacia rear span";
+const BAY_SHORE = "Bay Shore corridor to 47th St";
+const EAST_REAR = "East rear span along Bay Shore";
 const PPR_TABLE = "PPR reference – 1,329 ft (separate)";
 let n = 0;
 const id = (p: string) => `${p}-${++n}`;
@@ -33,6 +33,15 @@ describe("callout table", () => {
   it("skips pair counts and cable labels", () => {
     const { callouts } = parseCallouts("<table><tr><td>Cable</td><td>AKF 50 24</td></tr><tr><td>Pairs</td><td>50</td></tr><tr><td>1</td><td>200</td></tr></table>");
     expect(callouts).toEqual([{ label: "1", ft: 200 }]);
+  });
+});
+
+describe("run names", () => {
+  it("drops a trailing footage from the name; the table is the footage", () => {
+    expect(runName("South Acacia rear span — 824 ft")).toBe("South Acacia rear span");
+    expect(runName("Run 3 - 1,329'")).toBe("Run 3");
+    expect(runName("PPR reference – 1,329 ft (separate)")).toBe("PPR reference – 1,329 ft (separate)");
+    expect(runName("47th St")).toBe("47th St");
   });
 });
 

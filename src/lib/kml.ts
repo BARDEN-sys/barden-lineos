@@ -213,11 +213,11 @@ export function parseKml(text: string): ParsedRun[] {
 function folderTable(name: string | null, description: string, folders: string[]): ParsedRun | null {
   const { callouts, total } = parseCallouts(description);
   if (!callouts.length && total === null) return null;
-  const runName = name || "Folder table";
+  const tableName = (name && runName(name)) || "Folder table";
   return {
-    name: runName,
+    name: tableName,
     folders,
-    group: groupOf(folders, runName),
+    group: groupOf(folders, tableName),
     lines: [],
     description,
     callouts,
@@ -229,6 +229,11 @@ function folderTable(name: string | null, description: string, folders: string[]
   };
 }
 
+/** "Sapphire rear span — 894 ft" → "Sapphire rear span": the footage is shown from the table. */
+export function runName(name: string): string {
+  return name.replace(/\s*[—–-]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:ft\.?|feet|')\s*$/i, "").trim();
+}
+
 function placemark(body: string, folders: string[]): ParsedRun | null {
   const lines = [...body.matchAll(/<(?:\w+:)?LineString\b[\s\S]*?<(?:\w+:)?coordinates>([\s\S]*?)<\/(?:\w+:)?coordinates>/gi)]
     .map((x) => parseCoordinates(x[1]))
@@ -236,7 +241,7 @@ function placemark(body: string, folders: string[]): ParsedRun | null {
   if (!lines.length) return null;
   // The Placemark's own name/description, not those of an ExtendedData field.
   const own = body.replace(NOT_OWN, "");
-  const name = childText(own, "name") || "Unnamed run";
+  const name = runName(childText(own, "name")) || "Unnamed run";
   const description = childText(own, "description");
   const { callouts, total } = parseCallouts(description);
   const sum = callouts.reduce((a, c) => a + c.ft, 0);
