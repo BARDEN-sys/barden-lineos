@@ -56,6 +56,8 @@ npm run build
   - "Put on sheet" turns a PPX run into a run mark on that sheet under a FOOTAGE code, so the
     normal allocation engine (and the never-over-master rule) bills it. The mark keeps the line
     and callouts, and syncs with the crew like any mark.
+  - **Shared with the crew:** on a shared project the imported runs, their flags and footage
+    sign-offs sync to everyone (Supabase `kml_runs`, same rules as marks), live like marks do.
   - **Place on print:** a run put on a sheet first sits mid-page (dashed, "not placed on print").
     Tap 📍 Place on print (Map tab or the run's mark on Sheets), then tap where the run starts and
     where it ends on the print: the Google Earth shape is fitted between the two taps (turned and

@@ -1,4 +1,4 @@
-import type { DailyEntry, Job, Mark, Override, Photo } from "./types";
+import type { DailyEntry, Job, KmlRun, Mark, Override, Photo } from "./types";
 
 // Pure mapping between the on-phone Job and the shared Supabase rows, plus the diff that
 // decides what to upload. No network here, so it is unit-tested directly.
@@ -17,6 +17,16 @@ export type MarkRow = {
   job_id: string;
   sheet_id: string;
   data: Omit<Mark, "id" | "jobId" | "sheetId" | "createdBy" | "createdAt" | "updatedBy" | "updatedAt">;
+  deleted: boolean;
+  created_at: string;
+  created_by?: string;
+  updated_by?: string | null;
+  updated_at?: string;
+};
+export type KmlRunRow = {
+  id: string;
+  job_id: string;
+  data: Omit<KmlRun, "id" | "jobId" | "createdBy" | "createdAt">;
   deleted: boolean;
   created_at: string;
   created_by?: string;
@@ -67,9 +77,11 @@ export type SyncState = {
   overrides: Record<string, string>;
   daily: Record<string, string>;
   photos: Record<string, string>;
+  /** Google Earth runs; absent in sync states saved before runs were shared. */
+  kmlRuns?: Record<string, string>;
   syncedAt: string | null;
 };
-export const emptySyncState = (): SyncState => ({ job: "", marks: {}, overrides: {}, daily: {}, photos: {}, syncedAt: null });
+export const emptySyncState = (): SyncState => ({ job: "", marks: {}, overrides: {}, daily: {}, photos: {}, kmlRuns: {}, syncedAt: null });
 
 /** Stable JSON (sorted keys) so equal content always hashes the same. */
 export function stableJson(v: unknown): string {
@@ -106,6 +118,12 @@ export function markRow(m: Mark): MarkRow {
   return { id, job_id: jobId, sheet_id: sheetId, data, deleted: false, created_at: createdAt };
 }
 const markContent = (r: MarkRow) => stableJson({ sheet: r.sheet_id, data: r.data });
+
+export function kmlRunRow(r: KmlRun): KmlRunRow {
+  const { id, jobId, createdBy: _c, createdAt, ...data } = r;
+  return { id, job_id: jobId, data, deleted: false, created_at: createdAt };
+}
+const kmlRunContent = (r: KmlRunRow) => stableJson(r.data);
 
 export function overrideRow(o: Override): OverrideRow {
   return { job_id: o.jobId, sheet_id: o.sheetId, code: o.code, qty: o.qty, locked: o.locked, deleted: false, created_at: o.createdAt || new Date().toISOString() };
@@ -152,6 +170,8 @@ export type PushPlan = {
   newPhotos: Photo[];
   photoUpdates: PhotoRow[];
   photoDeletes: string[];
+  kmlRuns: KmlRunRow[];
+  kmlRunDeletes: string[];
 };
 
 export function isEmptyPlan(p: PushPlan): boolean {
@@ -165,7 +185,9 @@ export function isEmptyPlan(p: PushPlan): boolean {
     !p.dailyDeletes.length &&
     !p.newPhotos.length &&
     !p.photoUpdates.length &&
-    !p.photoDeletes.length
+    !p.photoDeletes.length &&
+    !p.kmlRuns.length &&
+    !p.kmlRunDeletes.length
   );
 }
 
@@ -184,6 +206,8 @@ export function planPush(job: Job, state: SyncState): PushPlan {
     newPhotos: [],
     photoUpdates: [],
     photoDeletes: [],
+    kmlRuns: [],
+    kmlRunDeletes: [],
   };
 
   const seenMarks = new Set<string>();
@@ -224,6 +248,15 @@ export function planPush(job: Job, state: SyncState): PushPlan {
     else if (state.photos[p.id] !== photoContent(r)) plan.photoUpdates.push(r);
   }
   plan.photoDeletes = Object.keys(state.photos).filter((id) => !seenPhotos.has(id));
+
+  const synced = state.kmlRuns ?? {};
+  const seenRuns = new Set<string>();
+  for (const k of job.kmlRuns ?? []) {
+    seenRuns.add(k.id);
+    const r = kmlRunRow(k);
+    if (synced[k.id] !== kmlRunContent(r)) plan.kmlRuns.push(r);
+  }
+  plan.kmlRunDeletes = Object.keys(synced).filter((id) => !seenRuns.has(id));
   return plan;
 }
 
@@ -233,6 +266,8 @@ export type RemoteRows = {
   overrides: OverrideRow[];
   daily: DailyRow[];
   photos: PhotoRow[];
+  /** null when the server has no kml_runs table yet: the phone keeps its own runs. */
+  kmlRuns: KmlRunRow[] | null;
   /** user id -> display name */
   names: Record<string, string>;
 };
@@ -286,8 +321,13 @@ export function applyRemote(local: Job, remote: RemoteRows, downloaded: Map<stri
     return have ? [{ ...have, sheetId: r.sheet_id, kind: r.kind, createdBy: name(r.created_by) }] : [];
   });
 
+  const kmlRuns: KmlRun[] | undefined = remote.kmlRuns
+    ? live(remote.kmlRuns).map((r) => ({ ...r.data, id: r.id, jobId: r.job_id, createdBy: name(r.created_by), createdAt: r.created_at }))
+    : local.kmlRuns;
+
   const job: Job = {
     ...local,
+    kmlRuns,
     header: remote.job.header,
     master: remote.job.master,
     glossary: remote.job.glossary,
@@ -309,9 +349,15 @@ export function applyRemote(local: Job, remote: RemoteRows, downloaded: Map<stri
         .filter((r) => photos.some((p) => p.id === r.id))
         .map((r) => [r.id, photoContent(r)]),
     ),
+    kmlRuns: remote.kmlRuns ? Object.fromEntries(live(remote.kmlRuns).map((r) => [r.id, kmlRunContent(r)])) : {},
     syncedAt: new Date().toISOString(),
   };
   return { job, state };
+}
+
+/** The server has not been given the kml_runs table yet (migration not applied). */
+export function isMissingTable(message: string): boolean {
+  return /PGRST205|42P01|Could not find the table|relation .* does not exist/i.test(message);
 }
 
 /** Turn a server error into words for the crew. */

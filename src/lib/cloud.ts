@@ -3,12 +3,14 @@ import {
   emptySyncState,
   friendlyError,
   isEmptyPlan,
+  isMissingTable,
   jobRow,
   photoPath,
   planPush,
   printPath,
   type DailyRow,
   type JobRow,
+  type KmlRunRow,
   type MarkRow,
   type OverrideRow,
   type PhotoRow,
@@ -215,22 +217,25 @@ async function downloadPhoto(r: PhotoRow): Promise<Photo | null> {
 
 async function fetchRemote(jobId: string) {
   const sb = supabase();
-  const [job, marks, overrides, daily, photos] = await Promise.all([
+  const [job, marks, overrides, daily, photos, runs] = await Promise.all([
     sb.from("jobs").select("*").eq("id", jobId).single(),
     sb.from("marks").select("*").eq("job_id", jobId),
     sb.from("overrides").select("*").eq("job_id", jobId),
     sb.from("daily_entries").select("*").eq("job_id", jobId),
     sb.from("photos").select("*").eq("job_id", jobId),
+    sb.from("kml_runs").select("*").eq("job_id", jobId),
   ]);
   const jr = check(job, "Project") as JobRow & { pdf_path: string | null };
   const m = check(marks, "Marks") as MarkRow[];
   const o = check(overrides, "Overrides") as OverrideRow[];
   const d = check(daily, "Daily") as DailyRow[];
   const p = check(photos, "Photos") as PhotoRow[];
-  const ids = [...new Set([...m, ...o, ...d].flatMap((r) => [r.created_by, r.updated_by]).concat(p.map((r) => r.created_by)).filter(Boolean))] as string[];
+  // A server without the kml_runs table yet: runs stay on the phone that imported them.
+  const k = runs.error && isMissingTable(runs.error.message) ? null : (check(runs, "Google Earth runs") as KmlRunRow[]);
+  const ids = [...new Set([...m, ...o, ...d, ...(k ?? [])].flatMap((r) => [r.created_by, r.updated_by]).concat(p.map((r) => r.created_by)).filter(Boolean))] as string[];
   const profiles = ids.length ? (check(await sb.from("profiles").select("id, display_name, email, phone").in("id", ids), "Names") as Profile[]) : [];
   const names = Object.fromEntries(profiles.map((x) => [x.id, x.display_name || x.email || x.phone || "crew member"]));
-  return { job: jr, marks: m, overrides: o, daily: d, photos: p, names };
+  return { job: jr, marks: m, overrides: o, daily: d, photos: p, kmlRuns: k, names };
 }
 
 /** A crew member downloads a shared project onto this phone. */
@@ -256,6 +261,7 @@ export async function downloadJob(jobId: string): Promise<{ job: Job; state: Syn
     overrides: [],
     photos: [],
     daily: [],
+    kmlRuns: [],
     cloud: { crewId: remote.job.crew_id, role, crewName: crew?.name },
     createdBy: "",
     createdAt: new Date().toISOString(),
@@ -308,6 +314,10 @@ export async function syncJob(job: Job, state: SyncState | null): Promise<SyncRe
     }
     for (const r of plan.photoUpdates) note(await sb.from("photos").update({ sheet_id: r.sheet_id, kind: r.kind }).eq("id", r.id), "Photo");
     for (const id of plan.photoDeletes) note(await sb.from("photos").update({ deleted: true }).eq("id", id), "Delete photo");
+    // Google Earth runs; skipped quietly until the server has the kml_runs table.
+    const runs = (res: { error: { message: string } | null }, what: string) => note(res.error && isMissingTable(res.error.message) ? { error: null } : res, what);
+    if (plan.kmlRuns.length) runs(await sb.from("kml_runs").upsert(plan.kmlRuns), "Google Earth runs");
+    for (const id of plan.kmlRunDeletes) runs(await sb.from("kml_runs").update({ deleted: true }).eq("id", id), "Remove Google Earth run");
   }
 
   const remote = await fetchRemote(job.id);
@@ -331,7 +341,12 @@ export function watchJob(jobId: string, onChange: () => void): () => void {
   }
   channel.on("postgres_changes", { event: "*", schema: "public", table: "jobs", filter: `id=eq.${jobId}` }, onChange);
   channel.subscribe();
+  // Own channel: a server without the kml_runs table must not break the live updates above.
+  const runs = sb.channel(`job-${jobId}-kml`);
+  runs.on("postgres_changes", { event: "*", schema: "public", table: "kml_runs", filter: `job_id=eq.${jobId}` }, onChange);
+  runs.subscribe();
   return () => {
     void sb.removeChannel(channel);
+    void sb.removeChannel(runs);
   };
 }

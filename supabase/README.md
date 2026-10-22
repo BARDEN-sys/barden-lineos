@@ -13,4 +13,6 @@ Migrations in `migrations/` were applied in order. They create:
   is rejected with `LINEOS_OVER_MASTER: … Already billed by: <names>`
 - `invite_preview(token)` (anyone) and `accept_invite(token)` (signed in)
 - private storage buckets `prints` and `photos`, keyed by project id
-- realtime on jobs, marks, overrides, daily_entries, photos
+- realtime on jobs, marks, overrides, daily_entries, photos, kml_runs
+- `kml_runs` (2026-10-22): Google Earth runs imported on a shared project, same rules as
+  marks (everyone on the project reads/writes, soft delete, server-stamped created_by / updated_by)

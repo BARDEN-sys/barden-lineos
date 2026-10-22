@@ -5,6 +5,8 @@ import {
   emptySyncState,
   friendlyError,
   isEmptyPlan,
+  isMissingTable,
+  kmlRunRow,
   markRow,
   overrideRow,
   photoRow,
@@ -13,7 +15,7 @@ import {
   type RemoteRows,
 } from "@/lib/cloudRows";
 import { demoJob } from "@/lib/job";
-import type { Job, Photo } from "@/lib/types";
+import type { Job, KmlRun, Photo } from "@/lib/types";
 
 let base: Job;
 beforeAll(async () => {
@@ -31,6 +33,7 @@ function serverEcho(job: Job, extra: Partial<RemoteRows> = {}): RemoteRows {
     overrides: job.overrides.map((o) => ({ ...overrideRow(o), created_by: user, updated_by: user })),
     daily: job.daily.map((e) => ({ ...dailyRow(e), created_by: user, updated_by: user, updated_at: e.createdAt })),
     photos: job.photos.map((p) => ({ ...photoRow(p), created_by: user })),
+    kmlRuns: (job.kmlRuns ?? []).map((r) => ({ ...kmlRunRow(r), created_by: user, updated_by: user })),
     names: { [user]: "Barry" },
     ...extra,
   };
@@ -126,5 +129,64 @@ describe("tokenFromLink", () => {
     ).toEqual({ hash: "abc123", type: "magiclink" });
     expect(tokenFromLink("https://x.supabase.co/auth/v1/verify?token=zz&type=signup")).toEqual({ hash: "zz", type: "signup" });
     expect(tokenFromLink("not a link")).toBeNull();
+  });
+});
+
+describe("Google Earth runs on a shared project", () => {
+  const run = (id: string, extra: Partial<KmlRun> = {}): KmlRun => ({
+    id,
+    jobId: base.id,
+    name: `Run ${id}`,
+    folder: "WO / PPX",
+    group: "PPX",
+    lines: [[[-82.46, 27.95], [-82.459, 27.95]]],
+    callouts: [{ label: "PPX callout 1", ft: 300 }],
+    printedFt: 300,
+    mapFt: 320,
+    mismatch: false,
+    sourceFile: "wo.kml",
+    createdBy: "Barry",
+    createdAt: "2026-10-22T12:00:00Z",
+    ...extra,
+  });
+
+  it("uploads imported runs, then sends nothing until one changes", () => {
+    const job: Job = { ...shared(), kmlRuns: [run("k1"), run("k2", { group: "PPR" })] };
+    const first = planPush(job, emptySyncState());
+    expect(first.kmlRuns.map((r) => r.id)).toEqual(["k1", "k2"]);
+    expect(first.kmlRuns[1].data.group).toBe("PPR");
+
+    const { job: synced, state } = applyRemote(job, serverEcho(job), new Map());
+    expect(synced.kmlRuns!.map((r) => [r.id, r.createdBy])).toEqual([["k1", "Barry"], ["k2", "Barry"]]);
+    expect(isEmptyPlan(planPush(synced, state))).toBe(true);
+
+    // A crew member signs off the printed footage on one run and removes the other.
+    const signed: Job = { ...synced, kmlRuns: [{ ...synced.kmlRuns![0], confirmedBy: "Jo", confirmedAt: "2026-10-22T13:00:00Z" }] };
+    const plan = planPush(signed, state);
+    expect(plan.kmlRuns.map((r) => [r.id, r.data.confirmedBy])).toEqual([["k1", "Jo"]]);
+    expect(plan.kmlRunDeletes).toEqual(["k2"]);
+  });
+
+  it("takes the crew's runs from the server (another phone imported them)", () => {
+    const job = shared();
+    const other: Job = { ...job, kmlRuns: [run("k9")] };
+    const { job: after } = applyRemote(job, serverEcho(other), new Map());
+    expect(after.kmlRuns!.map((r) => r.id)).toEqual(["k9"]);
+  });
+
+  it("keeps the phone's runs when the server has no kml_runs table yet", () => {
+    const job: Job = { ...shared(), kmlRuns: [run("k1")] };
+    const { job: after, state } = applyRemote(job, serverEcho(job, { kmlRuns: null }), new Map());
+    expect(after.kmlRuns!.map((r) => r.id)).toEqual(["k1"]);
+    expect(planPush(after, state).kmlRuns).toHaveLength(1); // retried once the table exists
+    expect(isMissingTable("Could not find the table 'public.kml_runs' in the schema cache")).toBe(true);
+    expect(isMissingTable('relation "public.kml_runs" does not exist')).toBe(true);
+    expect(isMissingTable("new row violates row-level security policy")).toBe(false);
+  });
+
+  it("old sync states without runs still plan an upload", () => {
+    const job: Job = { ...shared(), kmlRuns: [run("k1")] };
+    const { kmlRuns: _drop, ...old } = emptySyncState();
+    expect(planPush(job, old).kmlRuns).toHaveLength(1);
   });
 });
