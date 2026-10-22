@@ -44,12 +44,15 @@ npm run build
   - Footage for the codes is the **printed callout total** from the line's description table
     (e.g. "PPX callout 2 = 116 ft", or an HTML Callout / Feet table with or without a Total row).
     The line's length on the map is shown only as a cross-check; a run is flagged when the two
-    differ by more than 15%.
+    differ by more than 15%. A flagged run can't go on a sheet until someone taps "Printed … ft
+    matches the print" after checking the callouts; the run and its sheet mark record who checked.
   - Folders named PPX and PPR stay separate. PPR is reference only: it is totalled on its own,
     never added to PPX, and cannot be put on a sheet.
   - A folder whose own description holds the callout / feet table and has no lines under it
     (PPR in the WO 4222528 file) is read as a table-only entry: reference footage, no map line,
-    never billed. Plan-image overlays (`files/plan_1.jpg` …) are ignored, so missing ones are fine.
+    never billed; on the map it shows as a dashed label above the runs. Plan-image overlays (`files/plan_1.jpg` …) are ignored, so missing ones are fine.
+  - Importing the same file again does not double the runs: a run with the same folder and name is
+    kept, or replaced in place (same id, sign-off cleared) if its footage or line changed.
   - "Put on sheet" turns a PPX run into a run mark on that sheet under a FOOTAGE code, so the
     normal allocation engine (and the never-over-master rule) bills it. The mark keeps the line
     and callouts, and syncs with the crew like any mark.

@@ -179,6 +179,9 @@ export const KmlRun = z.object({
   mapFt: z.number().nonnegative(),
   /** Map length differs from printed footage by more than 15%. */
   mismatch: z.boolean(),
+  /** Who checked a flagged run's printed footage against the print; needed before it bills. */
+  confirmedBy: z.string().optional(),
+  confirmedAt: z.string().optional(),
   sourceFile: z.string(),
   createdBy: z.string(),
   createdAt: z.string(),

@@ -6,6 +6,7 @@ import { downloadJob, OfflineError, shareJob, syncJob, watchJob, type Crew } fro
 import { currentJobId, getSyncState, loadJob, requestPersistence, saveJob, setSyncState, storageAvailable } from "@/lib/storage";
 import { useAuth } from "./AuthProvider";
 import { currentUser } from "@/lib/user";
+import { mergeRuns } from "@/lib/kml";
 import { type Point, type Photo, type DailyEntry, type GlossaryEntry, type KmlRun, type Job, type JobHeader, type Mark, type MasterItem } from "@/lib/types";
 
 // The open job lives in memory and is saved to the phone (IndexedDB) after every change,
@@ -31,7 +32,8 @@ type Action =
   | { type: "update-daily"; row: DailyEntry }
   | { type: "delete-daily"; id: string }
   | { type: "add-kml-runs"; runs: KmlRun[] }
-  | { type: "delete-kml-runs"; ids: string[] };
+  | { type: "delete-kml-runs"; ids: string[] }
+  | { type: "confirm-kml-run"; id: string; confirmed: boolean };
 
 function reducer(job: Job | null, a: Action): Job | null {
   if (a.type === "set-job") return a.job;
@@ -90,9 +92,16 @@ function reducer(job: Job | null, a: Action): Job | null {
     case "delete-daily":
       return { ...job, daily: job.daily.filter((r) => r.id !== a.id) };
     case "add-kml-runs":
-      return { ...job, kmlRuns: [...(job.kmlRuns ?? []), ...a.runs] };
+      return { ...job, kmlRuns: mergeRuns(job.kmlRuns ?? [], a.runs).runs };
     case "delete-kml-runs":
       return { ...job, kmlRuns: (job.kmlRuns ?? []).filter((r) => !a.ids.includes(r.id)) };
+    case "confirm-kml-run":
+      return {
+        ...job,
+        kmlRuns: (job.kmlRuns ?? []).map((r) =>
+          r.id !== a.id ? r : a.confirmed ? { ...r, confirmedBy: currentUser(), confirmedAt: now } : { ...r, confirmedBy: undefined, confirmedAt: undefined },
+        ),
+      };
     case "clear-override":
       return { ...job, overrides: job.overrides.filter((o) => !(o.sheetId === a.sheetId && o.code === a.code)) };
   }

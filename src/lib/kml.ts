@@ -293,6 +293,37 @@ export function importRuns(job: Pick<Job, "id">, parsed: ParsedRun[], sourceFile
   }));
 }
 
+export type MergeResult = { runs: KmlRun[]; added: number; updated: number; unchanged: number; updatedIds: string[] };
+
+const runKey = (r: Pick<KmlRun, "group" | "folder" | "name">) => `${r.group}\u0000${r.folder}\u0000${r.name}`;
+const sameRun = (a: KmlRun, b: KmlRun) =>
+  a.printedFt === b.printedFt && a.mapFt === b.mapFt && JSON.stringify([a.lines, a.callouts]) === JSON.stringify([b.lines, b.callouts]);
+
+/**
+ * Importing a file again (or a newer copy) must not double the runs. A run with the same group,
+ * folder and name as one already on the job is the same run: identical → kept as is; changed →
+ * replaced in place under the old id (so sheet marks still point at it) and its sign-off cleared.
+ */
+export function mergeRuns(existing: KmlRun[], incoming: KmlRun[]): MergeResult {
+  const runs = [...existing];
+  const index = new Map(existing.map((r, i) => [runKey(r), i]));
+  const out: MergeResult = { runs, added: 0, updated: 0, unchanged: 0, updatedIds: [] };
+  for (const r of incoming) {
+    const i = index.get(runKey(r));
+    if (i === undefined) {
+      index.set(runKey(r), runs.push(r) - 1);
+      out.added++;
+    } else if (sameRun(runs[i], r)) {
+      out.unchanged++;
+    } else {
+      runs[i] = { ...r, id: runs[i].id };
+      out.updated++;
+      out.updatedIds.push(runs[i].id);
+    }
+  }
+  return out;
+}
+
 // ---------- Assigning a run to a sheet ----------
 
 export type AssignCheck = { ok: true } | { ok: false; error: string };
@@ -302,6 +333,8 @@ export function canAssign(job: Pick<Job, "master" | "glossary">, run: KmlRun, co
   if (run.group === "PPR") return { ok: false, error: `${run.name} is PPR (reference only) and is not billed.` };
   if (!run.lines.length) return { ok: false, error: `${run.name} is a folder footage table with no drawn line (reference only) and is not billed.` };
   if (run.printedFt <= 0) return { ok: false, error: `${run.name} has no printed callout footage to bill.` };
+  if (run.mismatch && !run.confirmedBy)
+    return { ok: false, error: `${run.name}: the map line is more than ${MISMATCH_LIMIT * 100}% off the printed footage. Check it against the print and confirm first.` };
   if (!job.master.some((m) => m.code === code)) return { ok: false, error: `${code} is not on the master list.` };
   if (job.glossary.find((g) => g.code === code)?.unitType !== "FOOTAGE") return { ok: false, error: `${code} is not a FOOTAGE code; run feet only bill under footage codes.` };
   return { ok: true };
@@ -338,7 +371,9 @@ export function runMark(run: KmlRun, sheetId: string, code: string, user: string
     points: pagePoints(run.lines),
     lengthFt: run.printedFt,
     items: [{ code, qty: run.printedFt }],
-    note: `Google Earth: ${run.name} (${run.group}) · printed ${run.printedFt.toLocaleString("en-US")} ft · map ${run.mapFt.toLocaleString("en-US")} ft`,
+    note:
+      `Google Earth: ${run.name} (${run.group}) · printed ${run.printedFt.toLocaleString("en-US")} ft · map ${run.mapFt.toLocaleString("en-US")} ft` +
+      (run.confirmedBy ? ` · printed footage confirmed by ${run.confirmedBy}` : ""),
     geo: { kmlRunId: run.id, name: run.name, group: run.group, lines: run.lines, callouts: run.callouts, printedFt: run.printedFt, mapFt: run.mapFt },
     createdBy: user,
     createdAt: new Date().toISOString(),

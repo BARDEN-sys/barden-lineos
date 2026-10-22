@@ -3,7 +3,7 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { allocate } from "@/lib/allocation";
-import { canAssign, exportKml, importRuns, isMismatch, kmlText, parseCallouts, parseKml, runMark, runName, runTotals } from "@/lib/kml";
+import { canAssign, exportKml, importRuns, isMismatch, kmlText, mergeRuns, parseCallouts, parseKml, runMark, runName, runTotals } from "@/lib/kml";
 import type { Job, KmlRun } from "@/lib/types";
 
 // The real WO 4222528 Google Earth file. Its plan-image overlays (files/plan_1.jpg…) are not included.
@@ -131,10 +131,51 @@ describe("assigning runs to sheets", () => {
     const ppr = j.kmlRuns!.find((r) => r.group === "PPR") as KmlRun;
     expect(canAssign(j, ppr, "P10F").ok).toBe(false);
     expect(canAssign(j, j.kmlRuns![0], "X99X").ok).toBe(false);
-    expect(canAssign(j, j.kmlRuns![0], "P10F").ok).toBe(true);
+    // Bay Shore (not flagged) can go straight on a sheet.
+    expect(canAssign(j, j.kmlRuns![2], "P10F").ok).toBe(true);
     j.master.push({ code: "S10B", description: "Cut Pairs Dead", estQty: 50 });
     j.glossary.push({ code: "S10B", description: "Cut Pairs Dead", unitType: "PAIRS" });
     expect(canAssign(j, j.kmlRuns![0], "S10B").ok).toBe(false);
+  });
+});
+
+describe("flagged runs need the printed footage checked", () => {
+  it("blocks Sapphire until someone confirms it, then bills the printed 894 and says who checked", () => {
+    const j = job();
+    const sapphire = j.kmlRuns![0];
+    const blocked = canAssign(j, sapphire, "P10F");
+    expect(blocked.ok).toBe(false);
+    expect(!blocked.ok && blocked.error).toMatch(/confirm/);
+    const checked = { ...sapphire, confirmedBy: "Barry", confirmedAt: "2026-10-22T16:00:00Z" };
+    expect(canAssign(j, checked, "P10F").ok).toBe(true);
+    const mark = runMark(checked, "s1", "P10F", "t", id("mark"));
+    expect(mark.items).toEqual([{ code: "P10F", qty: 894 }]);
+    expect(mark.note).toContain("confirmed by Barry");
+  });
+});
+
+describe("importing the same file again", () => {
+  const first = () => importRuns({ id: "job-1" }, parseKml(KML), "WO-4222528.kml", "t", id);
+
+  it("does not add runs twice", () => {
+    const have = first();
+    const again = mergeRuns(have, first());
+    expect(again.runs).toHaveLength(5);
+    expect([again.added, again.updated, again.unchanged]).toEqual([0, 0, 5]);
+    expect(again.runs.map((r) => r.id)).toEqual(have.map((r) => r.id));
+    expect(runTotals(again.runs).PPX).toBe(3216);
+  });
+
+  it("replaces a changed run under its old id and clears its footage check", () => {
+    const have = first().map((r, i) => (i === 0 ? { ...r, confirmedBy: "Barry" } : r));
+    const newer = first();
+    newer[0] = { ...newer[0], printedFt: 900, callouts: [...newer[0].callouts, { label: "18", ft: 6 }] };
+    const m = mergeRuns(have, [...newer, { ...newer[1], name: "New span" }]);
+    expect([m.added, m.updated, m.unchanged]).toEqual([1, 1, 4]);
+    expect(m.updatedIds).toEqual([have[0].id]);
+    expect(m.runs[0]).toMatchObject({ id: have[0].id, printedFt: 900 });
+    expect(m.runs[0].confirmedBy).toBeUndefined();
+    expect(m.runs).toHaveLength(6);
   });
 });
 

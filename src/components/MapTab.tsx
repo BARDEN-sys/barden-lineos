@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { canAssign, exportKml, importRuns, kmlText, MISMATCH_LIMIT, parseKml, runMark, runTotals, toLatLng } from "@/lib/kml";
+import { canAssign, exportKml, importRuns, kmlText, mergeRuns, MISMATCH_LIMIT, parseKml, runMark, runTotals, toLatLng } from "@/lib/kml";
 import { newId } from "@/lib/job";
 import { currentUser } from "@/lib/user";
 import type { KmlRun, RunGroup } from "@/lib/types";
@@ -34,17 +34,28 @@ export function MapTab() {
   async function onFiles(files: FileList | null) {
     setError(null);
     setNotice(null);
+    // Runs as they will be after each file, so a second file in the same pick is checked against the first.
+    let have = runs;
+    const notes: string[] = [];
     for (const f of Array.from(files ?? [])) {
       try {
         const parsed = parseKml(kmlText(new Uint8Array(await f.arrayBuffer())));
         if (!parsed.length) throw new Error("no lines (LineString Placemarks) found");
         const added = importRuns(job!, parsed, f.name, currentUser(), newId);
+        const merged = mergeRuns(have, added);
+        have = merged.runs;
         dispatch({ type: "add-kml-runs", runs: added });
         const t = runTotals(added);
-        setNotice(
+        const onSheet = merged.updatedIds.filter((id) => job!.marks.some((m) => m.geo?.kmlRunId === id)).length;
+        notes.push(
           `${f.name}: ${added.length} runs · PPX ${fmt(t.PPX)} ft · PPR ${fmt(t.PPR)} ft (reference)` +
-            (t.counts.OTHER ? ` · other ${fmt(t.OTHER)} ft` : ""),
+            (t.counts.OTHER ? ` · other ${fmt(t.OTHER)} ft` : "") +
+            (merged.unchanged || merged.updated
+              ? ` · ${merged.added} new, ${merged.updated} changed, ${merged.unchanged} already here (not added twice)`
+              : "") +
+            (onSheet ? ` · ${onSheet} changed run${onSheet > 1 ? "s are" : " is"} already on a sheet: take off and put back to bill the new footage` : ""),
         );
+        setNotice(notes.join("\n"));
       } catch (e) {
         setError(`Couldn't read ${f.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -70,12 +81,12 @@ export function MapTab() {
           Each line in the file is a run. Footage for the codes is the <b>printed callout total</b> in the line&apos;s description; the map length is a
           check only. PPR is reference only and never added to PPX.
         </p>
-        {notice && <p className="rounded-lg bg-emerald-50 p-2 text-sm text-emerald-800">{notice}</p>}
+        {notice && <p className="whitespace-pre-line rounded-lg bg-emerald-50 p-2 text-sm text-emerald-800">{notice}</p>}
         {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
         {runs.length > 0 && (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Stat label={`PPX · ${totals.counts.PPX} runs`} value={`${fmt(totals.PPX)} ft`} strong />
-            <Stat label={`PPR · ${totals.counts.PPR} runs (reference)`} value={`${fmt(totals.PPR)} ft`} />
+            <Stat label={`PPR · ${totals.counts.PPR} (reference)`} value={`${fmt(totals.PPR)} ft`} />
             <Stat label="Combined (info)" value={`${fmt(totals.combined)} ft`} />
             <Stat label={`Map vs printed > ${MISMATCH_LIMIT * 100}%`} value={`${flagged} flagged`} warn={flagged > 0} />
           </div>
@@ -145,6 +156,7 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
   const mark = job!.marks.find((m) => m.geo?.kmlRunId === run.id);
   const sheetLabel = (id: string) => job!.sheets.find((s) => s.id === id)?.label ?? "?";
   const diff = run.printedFt ? Math.round(((run.mapFt - run.printedFt) / run.printedFt) * 100) : null;
+  const needsConfirm = run.mismatch && !run.confirmedBy;
 
   function assign() {
     const check = canAssign(job!, run, code);
@@ -165,9 +177,14 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
         ) : (
           <span className="text-sm text-slate-500">folder table · no map line</span>
         )}
-        {run.mismatch && (
+        {needsConfirm && (
           <span className="chip border-amber-300 bg-amber-400 text-amber-950" title={`Map length is more than ${MISMATCH_LIMIT * 100}% off the printed footage`}>
             ⚠ check footage
+          </span>
+        )}
+        {run.mismatch && run.confirmedBy && (
+          <span className="chip border-emerald-300 bg-emerald-50 text-emerald-800" title={run.confirmedAt}>
+            ✓ printed footage checked · {run.confirmedBy}
           </span>
         )}
         {!run.callouts.length && <span className="chip border-red-300 bg-red-50 text-red-700">no callout table</span>}
@@ -209,7 +226,24 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
                   <option key={m.code} value={m.code}>{m.code}</option>
                 ))}
               </select>
-              <button className="btn-primary min-h-9" disabled={!codes.length || !job!.sheets.length} onClick={assign}>Put on sheet</button>
+              {needsConfirm ? (
+                <button
+                  className="btn-primary min-h-9"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setError(null);
+                    dispatch({ type: "confirm-kml-run", id: run.id, confirmed: true });
+                  }}
+                >
+                  Printed {fmt(run.printedFt)} ft matches the print
+                </button>
+              ) : (
+                <button className="btn-primary min-h-9" disabled={!codes.length || !job!.sheets.length} onClick={assign}>Put on sheet</button>
+              )}
+              {run.mismatch && run.confirmedBy && (
+                <button className="btn-ghost min-h-9" onClick={() => dispatch({ type: "confirm-kml-run", id: run.id, confirmed: false })}>Undo check</button>
+              )}
+              {needsConfirm && <span className="text-slate-500">Map line is {diff! > 0 ? "longer" : "shorter"} by {Math.abs(diff!)}%. Check the callouts on the print, then confirm.</span>}
               {!codes.length && <span className="text-slate-500">Add the footage code (unit type FOOTAGE) in Codes and on the Master list first.</span>}
             </>
           )}
@@ -267,20 +301,37 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
           line.addTo(layer);
         }
       }
+      // Table-only runs (e.g. PPR footage written on its folder) have no line: label them at the job's corner.
+      const tables = runs.filter((r) => !r.lines.length);
+      if (all.length && tables.length) {
+        const b = L.latLngBounds(all);
+        const top = L.latLng(b.getNorth(), b.getCenter().lng);
+        tables.forEach((r, i) => {
+          const icon = L.divIcon({
+            className: "",
+            iconSize: undefined,
+            iconAnchor: [0, 8 + i * 30],
+            html: `<div style="position:absolute;transform:translate(-50%,-100%);white-space:nowrap;border:2px dashed ${COLOR[r.group]};background:rgba(255,255,255,.92);color:#334155;border-radius:6px;padding:2px 6px;font:600 12px system-ui;${r.id === selected ? "outline:3px solid #ec4899;" : ""}">${r.group} ref · ${fmt(r.printedFt)} ft <span style="font-weight:400">(table, not drawn)</span></div>`,
+          });
+          L.marker(top, { icon, keyboard: false }).on("click", () => onSelect(r.id)).addTo(layer);
+        });
+      }
       const key = runs.map((r) => r.id).join();
       if (all.length && fitted.current !== key) {
         fitted.current = key;
-        mapRef.current?.fitBounds(L.latLngBounds(all), { padding: [24, 24], maxZoom: 19 });
+        const labels = runs.filter((r) => !r.lines.length).length;
+        mapRef.current?.fitBounds(L.latLngBounds(all), { paddingTopLeft: [24, 24 + labels * 30], paddingBottomRight: [24, 24], maxZoom: 19 });
       }
     });
   }, [runs, selected, ready, onSelect]);
 
   return (
-    <div className="relative h-[55vh] min-h-72 overflow-hidden rounded-xl border border-slate-200">
+    // isolate: Leaflet's panes and zoom buttons use z-index up to 1000; keep them under the sticky header.
+    <div className="relative isolate h-[55vh] min-h-72 overflow-hidden rounded-xl border border-slate-200">
       <div ref={divRef} className="absolute inset-0 bg-slate-200" />
-      <div className="absolute bottom-2 left-2 z-[500] flex gap-2 rounded bg-white/90 px-2 py-1 text-xs shadow">
+      <div className="absolute bottom-7 left-2 z-[500] flex gap-2 rounded bg-white/90 px-2 py-1 text-xs shadow">
         <span style={{ color: COLOR.PPX }}>━ PPX</span>
-        <span style={{ color: COLOR.PPR }}>┅ PPR (ref)</span>
+        <span style={{ color: COLOR.PPR }}>┅ PPR (ref, not billed)</span>
       </div>
     </div>
   );
