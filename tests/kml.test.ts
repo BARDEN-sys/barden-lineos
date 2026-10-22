@@ -6,8 +6,13 @@ import { allocate } from "@/lib/allocation";
 import { canAssign, exportKml, importRuns, isMismatch, kmlText, parseCallouts, parseKml, runMark, runTotals } from "@/lib/kml";
 import type { Job, KmlRun } from "@/lib/types";
 
-// Stand-in for the WO 4222528 Google Earth file (see the comment at the top of the fixture).
-const KML = readFileSync(path.join(__dirname, "fixtures/wo-4222528-standin.kml"), "utf8");
+// The real WO 4222528 Google Earth file. Its plan-image overlays (files/plan_1.jpg…) are not included.
+const KML = readFileSync(path.join(__dirname, "fixtures/WO-4222528.kml"), "utf8");
+const SAPPHIRE = "Sapphire / north Acacia rear span — 894 ft";
+const SOUTH_ACACIA = "South Acacia rear span — 824 ft";
+const BAY_SHORE = "Bay Shore corridor to 47th St — 874 ft";
+const EAST_REAR = "East rear span along Bay Shore — 624 ft";
+const PPR_TABLE = "PPR reference – 1,329 ft (separate)";
 let n = 0;
 const id = (p: string) => `${p}-${++n}`;
 
@@ -34,17 +39,21 @@ describe("callout table", () => {
 describe("WO 4222528 import", () => {
   const runs = parseKml(KML);
 
-  it("reads every LineString Placemark as a run, grouped by PPX / PPR folder", () => {
+  it("reads the 4 PPX lines and the PPR folder's own footage table, skipping the plan overlays", () => {
     expect(runs.map((r) => [r.group, r.name])).toEqual([
-      ["PPX", "Sapphire"],
-      ["PPX", "South Acacia"],
-      ["PPX", "PPX Run 3"],
-      ["PPX", "PPX Run 4"],
-      ["PPR", "PPR Reference A"],
-      ["PPR", "PPR Reference B"],
+      ["PPX", SAPPHIRE],
+      ["PPX", SOUTH_ACACIA],
+      ["PPX", BAY_SHORE],
+      ["PPX", EAST_REAR],
+      ["PPR", PPR_TABLE],
     ]);
-    expect(runs[0].folders).toEqual(["WO 4222528", "PPX"]);
-    expect(runs[0].callouts[1]).toEqual({ label: "PPX callout 2", ft: 116 });
+    expect(runs[0].folders).toEqual(["Highlighted PPX – 3,216 ft"]);
+    expect(runs[0].callouts[0]).toEqual({ label: "2", ft: 116 });
+    const ppr = runs[4];
+    expect(ppr.lines).toEqual([]);
+    expect(ppr.callouts.map((c) => [c.label, c.ft])).toEqual([
+      ["19", 224], ["20", 195], ["27", 96], ["36", 10], ["37", 45], ["39", 723], ["45", 36],
+    ]);
   });
 
   it("uses the printed callout totals: PPX 3,216 over 4 runs, PPR 1,329 kept separate", () => {
@@ -56,12 +65,12 @@ describe("WO 4222528 import", () => {
     expect(t.combined).toBe(4545);
   });
 
-  it("flags Sapphire and South Acacia (map length > 15% off the printed footage)", () => {
-    expect(runs.filter((r) => r.mismatch).map((r) => r.name)).toEqual(["Sapphire", "South Acacia"]);
-    const sapphire = runs[0];
-    expect(sapphire.printedFt).toBe(894);
-    expect(sapphire.mapFt).toBeGreaterThan(1200);
-    expect(sapphire.mapFt).toBeLessThan(1240);
+  it("flags Sapphire, South Acacia and East rear span (map length > 15% off either way), not Bay Shore", () => {
+    expect(runs.filter((r) => r.mismatch).map((r) => r.name)).toEqual([SAPPHIRE, SOUTH_ACACIA, EAST_REAR]);
+    // Map lengths about 1,220 / 1,009 / 906 / 510 ft against 894 / 824 / 874 / 624 printed.
+    const map = runs.slice(0, 4).map((r) => r.mapFt);
+    [1220, 1009, 906, 510].forEach((ft, i) => expect(Math.abs(map[i] - ft)).toBeLessThan(10));
+    expect(runs[4].mismatch).toBe(false);
     expect(isMismatch(100, 115)).toBe(false);
     expect(isMismatch(100, 116)).toBe(true);
   });
@@ -127,18 +136,18 @@ describe("KML export", () => {
     j.marks.push(runMark(j.kmlRuns![1], "s2", "P10F", "t", id("mark")));
     const out = exportKml(j);
     expect(out.match(/<Placemark>/g)).toHaveLength(2);
-    expect(out).toContain("<name>WO 4222528 · Sapphire</name>");
+    expect(out).toContain(`<name>WO 4222528 · ${SAPPHIRE}</name>`);
     expect(out).toContain("<color>ff9948ec</color>");
-    expect(out).toContain("<td>PPX callout 2</td><td align=\"right\">116</td>");
+    expect(out).toContain("<td>2</td><td align=\"right\">116</td>");
 
     // Round trip: Google Earth file back in gives the same runs and footage.
     const again = parseKml(out);
     expect(again.map((r) => [r.name, r.printedFt])).toEqual([
-      ["WO 4222528 · Sapphire", 894],
-      ["WO 4222528 · South Acacia", 824],
+      [`WO 4222528 · ${SAPPHIRE}`, 894],
+      [`WO 4222528 · ${SOUTH_ACACIA}`, 824],
     ]);
     expect(again[0].mapFt).toBe(j.kmlRuns![0].mapFt);
-    expect(again[0].callouts.map((c) => c.ft)).toEqual([230, 116, 300, 248]);
+    expect(again[0].callouts.map((c) => c.ft)).toEqual([116, 83, 139, 131, 125, 70, 87, 143]);
   });
 });
 

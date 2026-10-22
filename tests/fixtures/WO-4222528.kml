@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">
+<Document>
+	<name>4222528 – Acacia / Bay Shore removal routes</name>
+	<description>WO 4222528; 489 Acacia Dr, Sarasota, FL. PPX: 3,216 ft. PPR: 1,329 ft. Combined cable footage: 4,545 ft. Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</description>
+	<LookAt>
+		<longitude>-82.56180000000001</longitude>
+		<latitude>27.3765</latitude>
+		<altitude>0</altitude>
+		<heading>0</heading>
+		<tilt>0</tilt>
+		<range>1050</range>
+	</LookAt>
+	<Style id="pink">
+		<LineStyle>
+			<color>ff9e18ff</color>
+			<width>5</width>
+		</LineStyle>
+	</Style>
+	<Folder id="031EA792214296B98975">
+		<name>Highlighted PPX – 3,216 ft</name>
+		<Placemark id="1DD3BFC9664296B98975">
+			<name>Sapphire / north Acacia rear span — 894 ft</name>
+			<description><![CDATA[<table border="1"><tr><th>PPX callout</th><th>Feet</th></tr><tr><td>2</td><td>116</td></tr><tr><td>4</td><td>83</td></tr><tr><td>6</td><td>139</td></tr><tr><td>8</td><td>131</td></tr><tr><td>10</td><td>125</td></tr><tr><td>12</td><td>70</td></tr><tr><td>14</td><td>87</td></tr><tr><td>16</td><td>143</td></tr><tr><td>Total</td><td>894</td></tr></table><p>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</p>]]></description>
+			<styleUrl>#pink</styleUrl>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-82.563878682,27.377507371,0 -82.563645106,27.377603533,0 -82.56308848800001,27.377666243,0 -82.56233731899999,27.377764864,0 -82.561458014,27.377797681,0 -82.560737499,27.377797234,0 -82.56080079500001,27.377573855,0 -82.560890415,27.377298334,0
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark id="2CCA3E9BCF4296B98975">
+			<name>South Acacia rear span — 824 ft</name>
+			<description><![CDATA[<table border="1"><tr><th>PPX callout</th><th>Feet</th></tr><tr><td>22</td><td>81</td></tr><tr><td>24</td><td>113</td></tr><tr><td>26</td><td>109</td></tr><tr><td>28</td><td>191</td></tr><tr><td>30</td><td>157</td></tr><tr><td>32</td><td>173</td></tr><tr><td>Total</td><td>824</td></tr></table><p>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</p>]]></description>
+			<styleUrl>#pink</styleUrl>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-82.56343575299999,27.376722739,0 -82.56324304899999,27.37668681,0 -82.56235764100001,27.37674876,0 -82.561939452,27.376754618,0 -82.56143867500001,27.376745076,0 -82.56107114700001,27.376671895,0 -82.560991317,27.377000468,0 -82.560890415,27.377298334,0
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark id="32A204D1F64296B98975">
+			<name>Bay Shore corridor to 47th St — 874 ft</name>
+			<description><![CDATA[<table border="1"><tr><th>PPX callout</th><th>Feet</th></tr><tr><td>38</td><td>116</td></tr><tr><td>40</td><td>374</td></tr><tr><td>42</td><td>134</td></tr><tr><td>44</td><td>250</td></tr><tr><td>Total</td><td>874</td></tr></table><p>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</p>]]></description>
+			<styleUrl>#pink</styleUrl>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-82.560519207,27.376917102,0 -82.560615003,27.376522815,0 -82.560689373,27.376094262,0 -82.56072881599999,27.375913777,0 -82.560785225,27.3755278,0 -82.560874251,27.375284729,0 -82.560939015,27.375057183,0 -82.56098975899999,27.374875084,0 -82.561048822,27.374672028,0 -82.561242061,27.374606456,0
+				</coordinates>
+			</LineString>
+		</Placemark>
+		<Placemark id="4CE32F0BB74296B98975">
+			<name>East rear span along Bay Shore — 624 ft</name>
+			<description><![CDATA[<table border="1"><tr><th>PPX callout</th><th>Feet</th></tr><tr><td>47</td><td>122</td></tr><tr><td>49</td><td>119</td></tr><tr><td>51</td><td>134</td></tr><tr><td>53</td><td>56</td></tr><tr><td>55</td><td>193</td></tr><tr><td>Total</td><td>624</td></tr></table><p>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</p>]]></description>
+			<styleUrl>#pink</styleUrl>
+			<LineString>
+				<tessellate>1</tessellate>
+				<coordinates>
+					-82.56058718600001,27.376650354,0 -82.560034617,27.376572944,0 -82.560089046,27.376260592,0 -82.560111281,27.376139905,0 -82.560144326,27.376071862,0 -82.560214261,27.375855896,0 -82.56026460699999,27.375700851,0
+				</coordinates>
+			</LineString>
+		</Placemark>
+	</Folder>
+	<Folder id="56EF0865734296B98975">
+		<name>Original plans – approximate overlays (off)</name>
+		<visibility>0</visibility>
+		<GroundOverlay id="6755F191EF4296B98975">
+			<name>Plan sheet 1 – approximate alignment</name>
+			<visibility>0</visibility>
+			<description>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</description>
+			<color>bbffffff</color>
+			<Icon>
+				<href>files/plan_1.jpg</href>
+			</Icon>
+			<gx:LatLonQuad>
+				<coordinates>
+					-82.564262817,27.37499084,0 -82.557396948,27.375499031,0 -82.557805509,27.37959889,0 -82.564671379,27.379090699,0
+				</coordinates>
+			</gx:LatLonQuad>
+		</GroundOverlay>
+		<GroundOverlay id="74B37B406E4296B98975">
+			<name>Plan sheet 2 – approximate alignment</name>
+			<visibility>0</visibility>
+			<description>Approximate plan trace, registered against US Census TIGER road centerlines. Not surveyed pole or cable coordinates. Printed callout footage is authoritative for this takeoff; Google Earth geometric path lengths may differ. PPX equipment entries without printed footage excluded. PPR is listed separately and is not an additional highlighted PPX route.</description>
+			<color>bbffffff</color>
+			<Icon>
+				<href>files/plan_2.jpg</href>
+			</Icon>
+			<gx:LatLonQuad>
+				<coordinates>
+					-82.562380434,27.37328329,0 -82.558256595,27.374778373,0 -82.558218444,27.377375557,0 -82.562342282,27.375880474,0
+				</coordinates>
+			</gx:LatLonQuad>
+		</GroundOverlay>
+	</Folder>
+	<Folder id="84564B9A744296B98975">
+		<name>PPR reference – 1,329 ft (separate)</name>
+		<description><![CDATA[<table border="1"><tr><th>PPR callout</th><th>Feet</th></tr><tr><td>19</td><td>224</td></tr><tr><td>20</td><td>195</td></tr><tr><td>27</td><td>96</td></tr><tr><td>36</td><td>10</td></tr><tr><td>37</td><td>45</td></tr><tr><td>39</td><td>723</td></tr><tr><td>45</td><td>36</td></tr></table>]]></description>
+	</Folder>
+</Document>
+</kml>
