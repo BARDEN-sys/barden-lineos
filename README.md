@@ -46,6 +46,12 @@ npm run build
     The line's length on the map is shown only as a cross-check; a run is flagged when the two
     differ by more than 15%. A flagged run can't go on a sheet until someone taps "Printed … ft
     matches the print" after checking the callouts; the run and its sheet mark record who checked.
+    If the description has no callouts, footage-named data fields (ExtendedData, e.g. "Callout 1",
+    "Total_Ft" from ArcGIS / My Maps) are read instead.
+  - **No Google Earth file?** "Draw a run": tap the route on the satellite map and type the callout
+    feet from the print (one per line: "PPX callout 2 = 116", "2: 116" or just "116"; an optional
+    "Total" line wins). Pick PPX or PPR. A drawn run gets the same printed-vs-map flag and sign-off,
+    goes on a sheet, syncs and exports to Google Earth like an imported one.
   - Folders named PPX and PPR stay separate. PPR is reference only: it is totalled on its own,
     never added to PPX, and cannot be put on a sheet.
   - A folder whose own description holds the callout / feet table and has no lines under it

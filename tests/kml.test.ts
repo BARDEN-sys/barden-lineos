@@ -3,7 +3,7 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { allocate } from "@/lib/allocation";
-import { canAssign, exportKml, fitShape, importRuns, isMismatch, kmlText, mergeRuns, parseCallouts, parseKml, placeRun, runMark, runName, runTotals } from "@/lib/kml";
+import { canAssign, DRAWN_SOURCE, drawnRun, exportKml, fitShape, importRuns, isMismatch, kmlText, mergeRuns, parseCallouts, parseKml, parseTypedCallouts, placeRun, runMark, runName, runTotals } from "@/lib/kml";
 import type { Job, KmlRun } from "@/lib/types";
 
 // The real WO 4222528 Google Earth file. Its plan-image overlays (files/plan_1.jpg…) are not included.
@@ -277,5 +277,66 @@ describe("placing a run on the print", () => {
     const traced = placeRun(m, [[0.1, 0.5], [0.2, 0.5], [0.2, 0.3], [0.25, 0.3]], W, H);
     expect(traced.points).toEqual([[0.1, 0.5], [0.2, 0.5], [0.2, 0.3], [0.25, 0.3]]);
     expect(placeRun(m, [[0.1, 0.5]], W, H)).toBe(m);
+  });
+});
+
+describe("no Google Earth file: runs drawn in LineOS", () => {
+  // The real Sapphire line, as if traced by hand: ~1,218 ft on the map against 894 printed.
+  const sapphireLine = parseKml(KML)[0].lines[0];
+  const sapphire = "116\n83\n139\n131\n125\n70\n87\n143";
+
+  it("reads typed callouts: labelled, bare numbers, and a Total line", () => {
+    expect(parseTypedCallouts("PPX callout 2 = 116\n83\n139'\nCallout 8: 131 ft").callouts.map((c) => c.ft)).toEqual([116, 83, 139, 131]);
+    expect(parseTypedCallouts("116; 83; 139").callouts).toHaveLength(3);
+    expect(parseTypedCallouts("400\n474\nTotal 874").total).toBe(874);
+  });
+
+  it("builds a run checked like an imported one: printed footage, map length, mismatch flag", () => {
+    const run = drawnRun({ id: "job-1" }, { name: "Sapphire", group: "PPX", line: sapphireLine, calloutText: sapphire }, "t", id);
+    expect(run.printedFt).toBe(894);
+    expect(run.mapFt).toBeGreaterThan(1200);
+    expect(run.mismatch).toBe(true);
+    expect(run.sourceFile).toBe(DRAWN_SOURCE);
+    expect(() => drawnRun({ id: "job-1" }, { name: "x", group: "PPX", line: [sapphireLine[0]], calloutText: "10" }, "t", id)).toThrow();
+    expect(() => drawnRun({ id: "job-1" }, { name: "x", group: "PPX", line: sapphireLine, calloutText: "" }, "t", id)).toThrow();
+    // Same name in the same group would be merged over the first one, so it is refused.
+    expect(() => drawnRun({ id: "job-1", kmlRuns: [run] }, { name: "Sapphire", group: "PPX", line: sapphireLine, calloutText: "10" }, "t", id)).toThrow(/already/);
+    expect(drawnRun({ id: "job-1", kmlRuns: [run] }, { name: "Sapphire", group: "PPR", line: sapphireLine, calloutText: "10" }, "t", id).group).toBe("PPR");
+  });
+
+  it("needs the same sign-off, goes on a sheet, allocates, and exports; PPR drawn runs stay reference only", () => {
+    const j = job();
+    j.kmlRuns = [];
+    j.kmlRuns.push(drawnRun(j, { name: "Sapphire", group: "PPX", line: sapphireLine, calloutText: sapphire }, "t", id));
+    j.kmlRuns.push(drawnRun(j, { name: "Ref", group: "PPR", line: sapphireLine, calloutText: "1329" }, "t", id));
+    const [ppx, ppr] = j.kmlRuns;
+    expect(canAssign(j, ppr, "P10F").ok).toBe(false);
+    expect(canAssign(j, ppx, "P10F").ok).toBe(false); // flagged: check the print first
+    ppx.confirmedBy = "t";
+    expect(canAssign(j, ppx, "P10F").ok).toBe(true);
+    expect(runTotals(j.kmlRuns)).toMatchObject({ PPX: 894, PPR: 1329 });
+    j.marks.push(runMark(ppx, "s1", "P10F", "t", id("mark")));
+    const c = allocate(j).codes[0];
+    expect(c.marked).toBe(894);
+    expect(c.total).toBeLessThanOrEqual(c.master);
+    const again = parseKml(exportKml(j));
+    expect(again.map((r) => [r.name, r.printedFt, r.mismatch])).toEqual([["WO 4222528 · Sapphire", 894, true]]);
+  });
+});
+
+describe("callouts kept in data fields (ArcGIS / My Maps exports)", () => {
+  it("falls back to footage-named ExtendedData fields and ignores GIS ids and shape length", () => {
+    const kml = `<kml><Document><Folder><name>PPX</name><Placemark><name>Run A</name>
+      <ExtendedData>
+        <Data name="OBJECTID"><value>17</value></Data>
+        <Data name="Callout 1"><value>400 ft</value></Data>
+        <Data name="Callout 2"><value>474</value></Data>
+        <SchemaData schemaUrl="#s"><SimpleData name="Shape_Length">1301.2</SimpleData><SimpleData name="Total_Ft">874</SimpleData></SchemaData>
+      </ExtendedData>
+      <LineString><coordinates>-82.46,27.954,0 -82.4571916,27.954,0</coordinates></LineString></Placemark></Folder></Document></kml>`;
+    const [run] = parseKml(kml);
+    expect(run.group).toBe("PPX");
+    expect(run.callouts.map((c) => c.ft)).toEqual([400, 474]);
+    expect(run.printedFt).toBe(874);
   });
 });

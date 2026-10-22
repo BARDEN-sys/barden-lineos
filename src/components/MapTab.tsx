@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { canAssign, exportKml, importRuns, kmlText, mergeRuns, MISMATCH_LIMIT, parseKml, runMark, runTotals, toLatLng } from "@/lib/kml";
+import { canAssign, DRAWN_SOURCE, drawnRun, exportKml, importRuns, isMismatch, kmlText, lineFt, mergeRuns, MISMATCH_LIMIT, parseKml, parseTypedCallouts, runMark, runTotals, toLatLng } from "@/lib/kml";
 import { newId } from "@/lib/job";
 import { currentUser } from "@/lib/user";
 import type { KmlRun, RunGroup } from "@/lib/types";
@@ -24,6 +24,8 @@ export function MapTab({ onPlace }: { onPlace?: (markId: string) => void } = {})
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // Points of a run being traced by hand ([lng, lat]); null when not drawing.
+  const [draft, setDraft] = useState<[number, number][] | null>(null);
   const runs = useMemo(() => job?.kmlRuns ?? [], [job?.kmlRuns]);
   if (!job) return null;
 
@@ -74,14 +76,31 @@ export function MapTab({ onPlace }: { onPlace?: (markId: string) => void } = {})
             Upload .kml / .kmz
             <input type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" multiple className="hidden" onChange={(e) => { void onFiles(e.target.files); e.target.value = ""; }} />
           </label>
+          <button className="btn-ghost" disabled={draft !== null} onClick={() => { setDraft([]); setNotice(null); setError(null); }}>
+            Draw a run
+          </button>
           <button className="btn-ghost" disabled={!markedRuns} onClick={() => download(exportKml(job), `WO-${wo}-runs.kml`, "application/vnd.google-earth.kml+xml")}>
             Export marked runs (.kml)
           </button>
         </div>
         <p className="text-sm text-slate-600">
           Each line in the file is a run. Footage for the codes is the <b>printed callout total</b> in the line&apos;s description; the map length is a
-          check only. PPR is reference only and never added to PPX.
+          check only. PPR is reference only and never added to PPX. No file? <b>Draw a run</b>: trace it on the map and type the callout feet from
+          the print.
         </p>
+        {draft && (
+          <DrawPanel
+            points={draft}
+            onUndo={() => setDraft(draft.slice(0, -1))}
+            onCancel={() => setDraft(null)}
+            onSave={(run) => {
+              dispatch({ type: "add-kml-runs", runs: [run] });
+              setDraft(null);
+              setSelected(run.id);
+              setNotice(`${run.name}: ${fmt(run.printedFt)} ft printed (${run.group})${run.mismatch ? " · ⚠ map length is off the printed footage" : ""}`);
+            }}
+          />
+        )}
         {notice && <p className="whitespace-pre-line rounded-lg bg-emerald-50 p-2 text-sm text-emerald-800">{notice}</p>}
         {error && <p className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
         {runs.length > 0 && (
@@ -113,7 +132,9 @@ export function MapTab({ onPlace }: { onPlace?: (markId: string) => void } = {})
         )}
       </section>
 
-      {runs.length > 0 && <RunsMap runs={runs} selected={selected} onSelect={setSelected} />}
+      {(runs.length > 0 || draft) && (
+        <RunsMap runs={runs} selected={selected} onSelect={setSelected} draft={draft} onAddPoint={(p) => setDraft((d) => (d ? [...d, p] : d))} />
+      )}
 
       {(["PPX", "OTHER", "PPR"] as RunGroup[]).map((g) => {
         const list = runs.filter((r) => r.group === g);
@@ -131,8 +152,59 @@ export function MapTab({ onPlace }: { onPlace?: (markId: string) => void } = {})
         );
       })}
 
-      {runs.length === 0 && markedRuns === 0 && <p className="text-sm text-slate-500">No Google Earth file yet.</p>}
+      {runs.length === 0 && markedRuns === 0 && !draft && <p className="text-sm text-slate-500">No Google Earth file yet. Upload one or draw a run.</p>}
       {result && runs.length > 0 && <p className="text-xs text-slate-500">Assigned runs go through the same allocation as hand-marked runs: never over master.</p>}
+    </div>
+  );
+}
+
+function DrawPanel({ points, onUndo, onCancel, onSave }: { points: [number, number][]; onUndo: () => void; onCancel: () => void; onSave: (run: KmlRun) => void }) {
+  const { job } = useJob();
+  const [name, setName] = useState("");
+  const [group, setGroup] = useState<RunGroup>("PPX");
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const mapFt = points.length >= 2 ? lineFt([points]) : 0;
+  const { callouts, total } = parseTypedCallouts(text);
+  const printedFt = total ?? callouts.reduce((a, c) => a + c.ft, 0);
+  const off = printedFt > 0 && mapFt > 0 && isMismatch(printedFt, mapFt);
+
+  function save() {
+    try {
+      onSave(drawnRun(job!, { name, group, line: points, calloutText: text }, currentUser(), newId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-pink-300 bg-pink-50 p-3 text-sm">
+      <p className="font-semibold">Draw a run: tap the map along the route, then type the callouts from the print.</p>
+      <div className="flex flex-wrap gap-2">
+        <input className="input min-h-9 w-auto flex-1" placeholder="Run name (e.g. Sapphire)" value={name} onChange={(e) => setName(e.target.value)} aria-label="Run name" />
+        <select className="input min-h-9 w-auto" value={group} onChange={(e) => setGroup(e.target.value as RunGroup)} aria-label="PPX or PPR">
+          <option value="PPX">PPX (billed)</option>
+          <option value="PPR">PPR (reference only)</option>
+        </select>
+      </div>
+      <textarea
+        className="input min-h-24 font-mono"
+        placeholder={"One callout per line:\nPPX callout 1 = 230\nPPX callout 2 = 116\nor just 300\nTotal 894 (optional)"}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        aria-label="Callouts"
+      />
+      <p className="tabular-nums">
+        {points.length} points · map ~{fmt(mapFt)} ft · printed <b>{fmt(printedFt)} ft</b> from {callouts.length} callouts
+        {total !== null && " (total line)"}
+        {off && <span className="ml-2 chip border-amber-300 bg-amber-400 text-amber-950">⚠ more than {MISMATCH_LIMIT * 100}% off</span>}
+      </p>
+      {error && <p className="text-red-700">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button className="btn-primary min-h-9" onClick={save}>Save run</button>
+        <button className="btn-ghost min-h-9" disabled={!points.length} onClick={onUndo}>Undo point</button>
+        <button className="btn-ghost min-h-9" onClick={onCancel}>Cancel</button>
+      </div>
     </div>
   );
 }
@@ -189,6 +261,16 @@ function RunRow({ run, selected, onSelect, onPlace }: { run: KmlRun; selected: b
           </span>
         )}
         {!run.callouts.length && <span className="chip border-red-300 bg-red-50 text-red-700">no callout table</span>}
+        {run.sourceFile === DRAWN_SOURCE && (
+          <button
+            className="ml-auto text-sm text-red-600"
+            onClick={() => {
+              if (confirm(`Delete the drawn run ${run.name}? If it is on a sheet it stays there.`)) dispatch({ type: "delete-kml-runs", ids: [run.id] });
+            }}
+          >
+            Delete
+          </button>
+        )}
       </div>
       {open && (
         <table className="mt-2 text-sm">
@@ -261,12 +343,30 @@ function RunRow({ run, selected, onSelect, onPlace }: { run: KmlRun; selected: b
   );
 }
 
-function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: string | null; onSelect: (id: string) => void }) {
+function RunsMap({
+  runs,
+  selected,
+  onSelect,
+  draft,
+  onAddPoint,
+}: {
+  runs: KmlRun[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  draft: [number, number][] | null;
+  onAddPoint: (p: [number, number]) => void;
+}) {
   const divRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
   const [ready, setReady] = useState(false);
   const fitted = useRef("");
+  const draftRef = useRef<LayerGroup | null>(null);
+  // The click handler is bound once; read the latest drawing state through refs.
+  const drawing = useRef(false);
+  drawing.current = draft !== null;
+  const addPoint = useRef(onAddPoint);
+  addPoint.current = onAddPoint;
 
   useEffect(() => {
     let cancelled = false;
@@ -277,6 +377,10 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
       L.tileLayer(SATELLITE, { maxZoom: 20, maxNativeZoom: 19, attribution: SAT_CREDIT }).addTo(map);
       L.tileLayer(SAT_LABELS, { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
       layerRef.current = L.layerGroup().addTo(map);
+      draftRef.current = L.layerGroup().addTo(map);
+      map.on("click", (e) => {
+        if (drawing.current) addPoint.current([e.latlng.lng, e.latlng.lat]);
+      });
       mapRef.current = map;
       setReady(true);
     });
@@ -305,7 +409,11 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
             dashArray: r.group === "PPR" ? "8 8" : undefined,
           });
           line.bindTooltip(`${r.group} · ${r.name} · ${fmt(r.printedFt)} ft${r.mismatch ? " ⚠" : ""}`);
-          line.on("click", () => onSelect(r.id));
+          line.on("click", (e) => {
+            if (drawing.current) return; // let the click reach the map as a new point
+            L.DomEvent.stopPropagation(e);
+            onSelect(r.id);
+          });
           line.addTo(layer);
         }
       }
@@ -333,6 +441,26 @@ function RunsMap({ runs, selected, onSelect }: { runs: KmlRun[]; selected: strin
       }
     });
   }, [runs, selected, ready, onSelect]);
+
+  useEffect(() => {
+    if (!ready) return;
+    void import("leaflet").then((L) => {
+      const layer = draftRef.current;
+      if (!layer) return;
+      layer.clearLayers();
+      if (!draft) return;
+      const pts = toLatLng(draft);
+      if (pts.length >= 2) L.polyline(pts, { color: COLOR.PPX, weight: 5, dashArray: "4 6", interactive: false }).addTo(layer);
+      for (const p of pts) L.circleMarker(p, { radius: 5, color: "#fff", weight: 2, fillColor: COLOR.PPX, fillOpacity: 1, interactive: false }).addTo(layer);
+    });
+  }, [draft, ready]);
+
+  // Starting a drawing with nothing on the map: centre on where the crew is standing.
+  const startedEmpty = draft !== null && draft.length === 0 && runs.length === 0;
+  useEffect(() => {
+    if (!ready || !startedEmpty || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((p) => mapRef.current?.setView({ lat: p.coords.latitude, lng: p.coords.longitude }, 18, { animate: false }), () => {}, { timeout: 8000 });
+  }, [ready, startedEmpty]);
 
   return (
     // isolate: Leaflet's panes and zoom buttons use z-index up to 1000; keep them under the sticky header.

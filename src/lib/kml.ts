@@ -243,7 +243,9 @@ function placemark(body: string, folders: string[]): ParsedRun | null {
   const own = body.replace(NOT_OWN, "");
   const name = runName(childText(own, "name")) || "Unnamed run";
   const description = childText(own, "description");
-  const { callouts, total } = parseCallouts(description);
+  let { callouts, total } = parseCallouts(description);
+  // Some exports (ArcGIS, My Maps) keep the callouts in data fields instead of the description.
+  if (!callouts.length && total === null) ({ callouts, total } = parseCallouts(dataFieldLines(body)));
   const sum = callouts.reduce((a, c) => a + c.ft, 0);
   const printedFt = total ?? sum;
   const mapFt = lineFt(lines);
@@ -259,6 +261,26 @@ function placemark(body: string, folders: string[]): ParsedRun | null {
     mapFt,
     mismatch: isMismatch(printedFt, mapFt),
   };
+}
+
+// Only fields named like footage; GIS exports also carry OBJECTID, Shape_Length and the like.
+const FOOTAGE_FIELD = /callout|ftg|feet|footage|\bft\b|total/i;
+
+/** Footage-like ExtendedData <Data name><value> and <SimpleData name> fields as "name = value" lines. */
+export function dataFieldLines(body: string): string {
+  const ext = body.match(/<(?:\w+:)?ExtendedData\b[\s\S]*?<\/(?:\w+:)?ExtendedData>/i)?.[0] ?? "";
+  const out: string[] = [];
+  for (const m of ext.matchAll(/<(?:\w+:)?Data\b[^>]*\bname="([^"]*)"[^>]*>([\s\S]*?)<\/(?:\w+:)?Data>/gi)) {
+    const value = childText(m[2], "value");
+    const label = (childText(m[2], "displayName") || decodeEntities(m[1])).replace(/_/g, " ");
+    if (value && FOOTAGE_FIELD.test(label)) out.push(`${label} = ${value}`);
+  }
+  for (const m of ext.matchAll(/<(?:\w+:)?SimpleData\b[^>]*\bname="([^"]*)"[^>]*>([\s\S]*?)<\/(?:\w+:)?SimpleData>/gi)) {
+    const value = elementText(m[2]).trim();
+    const label = decodeEntities(m[1]).replace(/_/g, " ");
+    if (value && FOOTAGE_FIELD.test(label)) out.push(`${label} = ${value}`);
+  }
+  return out.join("\n");
 }
 
 export type RunTotals = { PPX: number; PPR: number; OTHER: number; combined: number; counts: Record<RunGroup, number> };
@@ -322,6 +344,57 @@ export function mergeRuns(existing: KmlRun[], incoming: KmlRun[]): MergeResult {
     }
   }
   return out;
+}
+
+// ---------- Runs drawn in LineOS (no Google Earth file) ----------
+
+/** sourceFile for runs traced on the map by hand. */
+export const DRAWN_SOURCE = "Drawn in LineOS";
+
+/**
+ * Callouts typed by the crew, one per line: "PPX callout 2 = 116 ft", "2: 116", or just "116".
+ * A "Total" line sets the printed total, the same as a Google Earth table.
+ */
+export function parseTypedCallouts(text: string): { callouts: Callout[]; total: number | null } {
+  const lines = text
+    .split(/\r?\n|;/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    // A bare number is a callout's feet.
+    .map((l) => (/^[\d,]+(?:\.\d+)?$/.test(l) ? `${l} ft` : l));
+  return parseCallouts(lines.join("\n"));
+}
+
+export type DrawnRunInput = { name: string; group: RunGroup; line: [number, number][]; calloutText: string };
+
+/**
+ * A run traced on the map with its typed callouts, checked the same way as an imported one.
+ * Names must be new within the group: mergeRuns treats the same group / folder / name as the same run.
+ */
+export function drawnRun(job: Pick<Job, "id" | "kmlRuns">, input: DrawnRunInput, user: string, newId: (p: string) => string): KmlRun {
+  if (input.line.length < 2) throw new Error("Tap at least two points on the map.");
+  const { callouts, total } = parseTypedCallouts(input.calloutText);
+  if (!callouts.length && total === null) throw new Error("Type the callout feet from the print, one per line.");
+  const name = input.name.trim() || `Drawn run ${(job.kmlRuns ?? []).filter((r) => r.sourceFile === DRAWN_SOURCE).length + 1}`;
+  const folder = `${DRAWN_SOURCE} / ${input.group}`;
+  if ((job.kmlRuns ?? []).some((r) => r.folder === folder && r.name === name)) throw new Error(`There is already a drawn ${input.group} run called ${name}.`);
+  const printedFt = total ?? callouts.reduce((a, c) => a + c.ft, 0);
+  const mapFt = lineFt([input.line]);
+  return {
+    id: newId("kml"),
+    jobId: job.id,
+    name,
+    folder,
+    group: input.group,
+    lines: [input.line],
+    callouts,
+    printedFt,
+    mapFt,
+    mismatch: isMismatch(printedFt, mapFt),
+    sourceFile: DRAWN_SOURCE,
+    createdBy: user,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 // ---------- Assigning a run to a sheet ----------
