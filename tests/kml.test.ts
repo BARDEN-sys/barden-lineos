@@ -141,3 +141,44 @@ describe("KML export", () => {
     expect(again[0].callouts.map((c) => c.ft)).toEqual([230, 116, 300, 248]);
   });
 });
+
+describe("folder-level callout table (PPR with no lines)", () => {
+  const rows = [224, 195, 96, 10, 45, 723, 36].map((ft, i) => `<tr><td>PPR callout ${i + 1}</td><td>${ft}</td></tr>`).join("");
+  const kml = `<kml><Document><name>WO</name><Folder><name>WO 4222528</name>
+    <GroundOverlay><name>Plan 1</name><description>Sheet 1 · 999 ft</description><Icon><href>files/plan_1.jpg</href></Icon></GroundOverlay>
+    <Folder><name>PPX</name>
+      <Placemark><name>Run A</name><description>Total = 300 ft</description><LineString><coordinates>-80,26,0 -80,26.001,0</coordinates></LineString></Placemark>
+    </Folder>
+    <Folder><name>PPR</name><description><![CDATA[<table><tr><th>Callout</th><th>Feet</th></tr>${rows}</table>]]></description></Folder>
+  </Folder></Document></kml>`;
+  const runs = parseKml(kml);
+
+  it("reads the folder's own table as one PPR reference run, kept out of PPX", () => {
+    expect(runs.map((r) => [r.group, r.name, r.printedFt])).toEqual([
+      ["PPX", "Run A", 300],
+      ["PPR", "PPR", 1329],
+    ]);
+    const ppr = runs[1];
+    expect(ppr.callouts.map((c) => c.ft)).toEqual([224, 195, 96, 10, 45, 723, 36]);
+    expect(ppr.lines).toEqual([]);
+    expect(ppr.mismatch).toBe(false);
+    const t = runTotals(runs);
+    expect([t.PPX, t.PPR, t.combined]).toEqual([300, 1329, 1629]);
+  });
+
+  it("ignores GroundOverlay names/descriptions and missing plan images", () => {
+    expect(runs[0].folders).toEqual(["WO 4222528", "PPX"]);
+    expect(runs.some((r) => r.printedFt === 999)).toBe(false);
+  });
+
+  it("does not add a folder table when the folder has drawn runs under it", () => {
+    const withLines = kml.replace("<Folder><name>PPX</name>", "<Folder><name>PPX</name><description>Total 300 ft</description>");
+    expect(parseKml(withLines).filter((r) => r.group === "PPX")).toHaveLength(1);
+  });
+
+  it("never bills a table-only run, even outside a PPR folder", () => {
+    const j = job();
+    const [table] = importRuns(j, [{ ...runs[1], group: "OTHER" }], "wo.kml", "t", id);
+    expect(canAssign(j, table, "P10F").ok).toBe(false);
+  });
+});

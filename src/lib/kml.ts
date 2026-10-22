@@ -5,6 +5,8 @@ import type { Job, KmlRun, Mark, Point, RunGroup } from "./types";
 // Google Earth runs (.kml / .kmz). Each Placemark with a LineString is one run. The footage
 // that feeds the unit codes is the printed callout total from the Placemark's description
 // table; the length of the line on the map is only a cross-check.
+// A Folder can also carry the table itself with no lines in it (the real WO 4222528 file does
+// this for PPR); that becomes a table-only run: reference footage, no map line, never billed.
 
 /** Map length vs printed footage beyond this fraction flags the run. */
 export const MISMATCH_LIMIT = 0.15;
@@ -162,10 +164,15 @@ export function isMismatch(printedFt: number, mapFt: number): boolean {
   return Math.abs(mapFt - printedFt) / printedFt > MISMATCH_LIMIT;
 }
 
+// Overlays, styles and data blocks have their own <name>/<description>; never read those as the
+// container's. GroundOverlay images (files/plan_1.jpg…) are not fetched, so missing ones are fine.
+const NOT_OWN = /<(?:\w+:)?(GroundOverlay|ScreenOverlay|PhotoOverlay|NetworkLink|ExtendedData|Style|StyleMap)\b[\s\S]*?<\/(?:\w+:)?\1>/gi;
+
 export function parseKml(text: string): ParsedRun[] {
   const runs: ParsedRun[] = [];
   // Walk container tags in order so each Placemark knows its folder path.
-  const stack: { tag: string; name: string | null }[] = [];
+  const stack: { tag: string; name: string | null; description: string; runsAt: number }[] = [];
+  const folderPath = () => stack.filter((s) => s.tag === "folder" && s.name).map((s) => s.name!);
   const re = /<(\/?)(?:\w+:)?(Folder|Document|Placemark)\b[^>]*?(\/?)>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
@@ -179,22 +186,47 @@ export function parseKml(text: string): ParsedRun[] {
       const em = endRe.exec(text);
       const body = text.slice(re.lastIndex, em ? em.index : text.length);
       re.lastIndex = em ? endRe.lastIndex : text.length;
-      const run = placemark(body, stack.filter((s) => s.tag === "folder" && s.name).map((s) => s.name!));
+      const run = placemark(body, folderPath());
       if (run) runs.push(run);
       continue;
     }
     if (close) {
+      // A folder with its own callout table and no drawn runs under it: a table-only run.
+      if (stack[stack.length - 1]?.tag === "folder") {
+        const top = stack[stack.length - 1];
+        const table = top.description && runs.length === top.runsAt ? folderTable(top.name, top.description, folderPath()) : null;
+        if (table) runs.push(table);
+      }
       stack.pop();
       continue;
     }
-    // The container's own <name> comes before any nested container.
+    // The container's own <name>/<description> come before any nested container.
     const rest = text.slice(re.lastIndex);
     const nextChild = rest.search(/<(?:\w+:)?(Folder|Document|Placemark)\b/i);
-    const head = nextChild < 0 ? rest : rest.slice(0, nextChild);
+    const head = (nextChild < 0 ? rest : rest.slice(0, nextChild)).replace(NOT_OWN, "");
     const name = head.match(/<(?:\w+:)?name\b[^>]*>([\s\S]*?)<\/(?:\w+:)?name>/i);
-    stack.push({ tag, name: name ? elementText(name[1]).trim() : null });
+    stack.push({ tag, name: name ? elementText(name[1]).trim() : null, description: childText(head, "description"), runsAt: runs.length });
   }
   return runs;
+}
+
+function folderTable(name: string | null, description: string, folders: string[]): ParsedRun | null {
+  const { callouts, total } = parseCallouts(description);
+  if (!callouts.length && total === null) return null;
+  const runName = name || "Folder table";
+  return {
+    name: runName,
+    folders,
+    group: groupOf(folders, runName),
+    lines: [],
+    description,
+    callouts,
+    printedTotal: total,
+    printedFt: total ?? callouts.reduce((a, c) => a + c.ft, 0),
+    mapFt: 0,
+    // No line on the map to check against.
+    mismatch: false,
+  };
 }
 
 function placemark(body: string, folders: string[]): ParsedRun | null {
@@ -203,7 +235,7 @@ function placemark(body: string, folders: string[]): ParsedRun | null {
     .filter((l) => l.length >= 2);
   if (!lines.length) return null;
   // The Placemark's own name/description, not those of an ExtendedData field.
-  const own = body.replace(/<(?:\w+:)?(ExtendedData|Style|StyleMap)\b[\s\S]*?<\/(?:\w+:)?\1>/gi, "");
+  const own = body.replace(NOT_OWN, "");
   const name = childText(own, "name") || "Unnamed run";
   const description = childText(own, "description");
   const { callouts, total } = parseCallouts(description);
@@ -263,6 +295,7 @@ export type AssignCheck = { ok: true } | { ok: false; error: string };
 /** PPR is reference only; the code must be on the master and not pushed over it by locks. */
 export function canAssign(job: Pick<Job, "master" | "glossary">, run: KmlRun, code: string): AssignCheck {
   if (run.group === "PPR") return { ok: false, error: `${run.name} is PPR (reference only) and is not billed.` };
+  if (!run.lines.length) return { ok: false, error: `${run.name} is a folder footage table with no drawn line (reference only) and is not billed.` };
   if (run.printedFt <= 0) return { ok: false, error: `${run.name} has no printed callout footage to bill.` };
   if (!job.master.some((m) => m.code === code)) return { ok: false, error: `${code} is not on the master list.` };
   if (job.glossary.find((g) => g.code === code)?.unitType !== "FOOTAGE") return { ok: false, error: `${code} is not a FOOTAGE code; run feet only bill under footage codes.` };

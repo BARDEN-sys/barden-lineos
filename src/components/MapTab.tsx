@@ -160,7 +160,11 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
         <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ background: COLOR[run.group] }} />
         <button className="font-semibold underline-offset-2 hover:underline" onClick={() => setOpen((o) => !o)}>{run.name}</button>
         <span className="tabular-nums">{fmt(run.printedFt)} ft printed</span>
-        <span className="text-sm text-slate-500 tabular-nums">map ~{fmt(run.mapFt)} ft{diff !== null && ` (${diff > 0 ? "+" : ""}${diff}%)`}</span>
+        {run.lines.length ? (
+          <span className="text-sm text-slate-500 tabular-nums">map ~{fmt(run.mapFt)} ft{diff !== null && ` (${diff > 0 ? "+" : ""}${diff}%)`}</span>
+        ) : (
+          <span className="text-sm text-slate-500">folder table · no map line</span>
+        )}
         {run.mismatch && (
           <span className="chip border-amber-300 bg-amber-400 text-amber-950" title={`Map length is more than ${MISMATCH_LIMIT * 100}% off the printed footage`}>
             ⚠ check footage
@@ -184,7 +188,7 @@ function RunRow({ run, selected, onSelect }: { run: KmlRun; selected: boolean; o
           </tbody>
         </table>
       )}
-      {run.group !== "PPR" && (
+      {run.group !== "PPR" && run.lines.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           {mark ? (
             <>
